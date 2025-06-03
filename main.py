@@ -1,10 +1,13 @@
 import time
+from telegram import Bot
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-print("Jarvis bot başlatıldı...")
+def send_start_message():
+    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="✅ Jarvis bot başlatıldı!")
 
-try:
+if __name__ == "__main__":
+    send_start_message()
+    print("Jarvis bot çalışıyor...")
     while True:
-        print("Bot aktif...")  # Her döngüde log'a bir mesaj yaz
-        time.sleep(30)         # 30 saniyede bir çalıştığını gösterir
-except Exception as e:
-    print("Bir hata oluştu:", e)
+        time.sleep(60)
