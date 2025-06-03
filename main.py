@@ -10,14 +10,14 @@ from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
 
-print("📦 Bot başlatılıyor...")  # Başlangıçta log için
+print("📦 Bot başlatılıyor...")
 
 TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
 CHAT_ID = "-1002549376225"
 bot = TeleBot(TOKEN)
 
 COIN_LIST_FILE = "coin_list_500_sample.txt"
-BALINA_HACIM_ESIGI = 10  # %10
+BALINA_HACIM_ESIGI = 10  # %10 hacim artışı
 
 def get_coin_data(coin_id):
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
@@ -68,6 +68,7 @@ def analyze_coin(coin_id):
 def send_telegram_message(message):
     try:
         bot.send_message(chat_id=CHAT_ID, text=message)
+        print("📤 Telegram mesajı gönderildi.")
     except Exception as e:
         print(f"Telegram hatası: {e}")
 
@@ -88,20 +89,20 @@ def main():
         print(f"⏳ Analiz başlıyor: {coin_id}")
         sinyal = analyze_coin(coin_id)
         if sinyal:
-            print(f"📬 Sinyal gönderiliyor: {coin_id}")
+            print(f"📬 Sinyal bulundu: {coin_id}")
             send_telegram_message(sinyal)
             sinyal_gonderildi = True
             time.sleep(1)
 
     if not sinyal_gonderildi:
-        print("📭 Sinyal yok, boş mesaj gönderiliyor.")
+        print("📭 Sinyal yok, Telegram'a bilgi verildi.")
         send_telegram_message("📡 Saatlik tarama yapıldı, sinyale rastlanmadı.")
 
 if __name__ == "__main__":
     while True:
         now = datetime.utcnow()
         if now.minute == 0 and now.second < 10:
-            print(f"✅ Tarama başladı: {now}")
+            print(f"✅ Tarama başlıyor: {now}")
             main()
             time.sleep(60)
         else:
