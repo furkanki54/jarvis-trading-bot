@@ -1,4 +1,4 @@
 import time
-print("Jarvis bot çalışıyor...")
+print("Jarvis bot hala çalışıyor...")
 while True:
     time.sleep(60)
