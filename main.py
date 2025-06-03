@@ -1,81 +1,83 @@
 import time
 import requests
-from datetime import datetime
-import telebot
+import pandas as pd
+import ta
+from telebot import TeleBot
 
-# Telegram bot bilgileri
-BOT_TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
-CHAT_ID = "-1002549376225"
-bot = telebot.TeleBot(BOT_TOKEN)
+# Telegram ayarları
+TELEGRAM_BOT_TOKEN = '7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw'
+TELEGRAM_CHAT_ID = '-1002549376225'
+bot = TeleBot(TELEGRAM_BOT_TOKEN)
 
-# Coin listesi dosyası
-COIN_LIST_FILE = "coin_list_500_sample.txt"
+# Coin listesi
+with open("coin_list_500_sample.txt", "r") as f:
+    coin_list = [line.strip() for line in f.readlines()]
 
-def load_coin_list():
-    with open(COIN_LIST_FILE, "r") as f:
-        return [line.strip() for line in f.readlines()]
+def send_telegram_message(message):
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, message)
+    except Exception as e:
+        print("Telegram hatası:", e)
 
-def get_gecko_data(coin_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json()
-    return None
+def get_ohlcv(coin_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=2&interval=hourly"
+    r = requests.get(url)
+    data = r.json()
+    df = pd.DataFrame(data['prices'], columns=['time', 'price'])
+    df['volume'] = [v[1] for v in data['total_volumes']]
+    df['price'] = df['price'].astype(float)
+    df['volume'] = df['volume'].astype(float)
+    df['ema50'] = ta.trend.ema_indicator(df['price'], window=50)
+    df['ema200'] = ta.trend.ema_indicator(df['price'], window=200)
+    df['rsi'] = ta.momentum.rsi(df['price'], window=14)
+    macd = ta.trend.macd_diff(df['price'])
+    df['macd'] = macd
+    return df
 
 def analyze_coin(coin_id):
-    data = get_gecko_data(coin_id)
-    if not data or 'prices' not in data:
-        return None
+    try:
+        df = get_ohlcv(coin_id)
+        last = df.iloc[-1]
 
-    prices = [p[1] for p in data["prices"]]
-    volumes = [v[1] for v in data["total_volumes"]]
+        rsi = last['rsi']
+        macd = last['macd']
+        ema50 = last['ema50']
+        ema200 = last['ema200']
+        price = last['price']
+        volume_now = last['volume']
+        volume_prev = df.iloc[-2]['volume']
 
-    # Fiyat değişimi (yüzde olarak)
-    change = (prices[-1] - prices[-2]) / prices[-2] * 100
-    volume_change = (volumes[-1] - volumes[-2]) / volumes[-2] * 100 if volumes[-2] != 0 else 0
+        trend = "Boğa" if ema50 > ema200 else "Ayı"
+        signal = []
 
-    # MACD hesaplama (basit)
-    ema12 = sum(prices[-12:]) / 12
-    ema26 = sum(prices[-26:]) / 26
-    macd = ema12 - ema26
-    signal_line = sum(prices[-9:]) / 9
+        if rsi > 70:
+            signal.append("🔴 Aşırı Alım (RSI > 70)")
+        elif rsi < 30:
+            signal.append("🟢 Aşırı Satım (RSI < 30)")
 
-    # RSI hesaplama (basit)
-    gains = [max(prices[i + 1] - prices[i], 0) for i in range(13)]
-    losses = [abs(min(prices[i + 1] - prices[i], 0)) for i in range(13)]
-    avg_gain = sum(gains) / 14
-    avg_loss = sum(losses) / 14
-    rs = avg_gain / avg_loss if avg_loss != 0 else 0
-    rsi = 100 - (100 / (1 + rs))
+        if macd > 0:
+            signal.append("📈 MACD Pozitif")
+        else:
+            signal.append("📉 MACD Negatif")
 
-    trend = "Boğa" if rsi > 55 and macd > signal_line else "Ayı"
+        if ema50 > ema200:
+            signal.append("Golden Cross")
+        elif ema50 < ema200:
+            signal.append("Death Cross")
 
-    if abs(change) >= 1 or abs(volume_change) >= 30:
-        message = (
-            f"📊 Coin: {coin_id}\n"
-            f"💵 Fiyat değişimi (1s): {change:.2f}%\n"
-            f"📈 Hacim değişimi (1s): {volume_change:.2f}%\n"
-            f"📉 RSI: {rsi:.2f}\n"
-            f"📊 MACD: {macd:.4f}\n"
-            f"📊 Signal: {signal_line:.4f}\n"
-            f"📣 Trend Yorumu: {trend} piyasası!"
-        )
-        return message
-    return None
+        hacim_degisim = ((volume_now - volume_prev) / volume_prev) * 100
+        if hacim_degisim >= 30:
+            signal.append(f"🐋 Balina Hacmi: %{round(hacim_degisim)}")
 
-def main():
-    coin_list = load_coin_list()
-    while True:
-        for coin in coin_list:
-            try:
-                result = analyze_coin(coin)
-                if result:
-                    bot.send_message(CHAT_ID, result)
-            except Exception as e:
-                print(f"Hata {coin}: {e}")
-            time.sleep(1.5)
-        print(f"Saatlik analiz tamamlandı: {datetime.now()}")
-        time.sleep(3600)  # 1 saat uyku
+        if signal:
+            mesaj = f"📊 {coin_id.upper()} Analizi:\n" + "\n".join(signal) + f"\n📉 Fiyat: ${price:.2f} | Trend: {trend}"
+            send_telegram_message(mesaj)
 
-if __name__ == "__main__":
-    main()
+    except Exception as e:
+        print(f"{coin_id} analizi sırasında hata: {e}")
+
+while True:
+    for coin in coin_list:
+        analyze_coin(coin)
+        time.sleep(1)
+    time.sleep(3600)
