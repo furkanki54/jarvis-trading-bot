@@ -10,4 +10,4 @@ if __name__ == "__main__":
     asyncio.run(send_start_message())
     print("Jarvis bot çalışıyor...")
     while True:
-        pass  # veya time.sleep(60) koyabilirsin ama async kodda gerek yok şimdilik
+        pass  # veya time.sleep(60) koyabilirsin ama 
