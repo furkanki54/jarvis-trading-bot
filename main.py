@@ -7,17 +7,20 @@ from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
 
+print("📦 Bot başlatılıyor...")  # Başlangıçta log için
+
 TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
 CHAT_ID = "-1002549376225"
 bot = TeleBot(TOKEN)
 
 COIN_LIST_FILE = "coin_list_500_sample.txt"
-BALINA_HACIM_ESIGI = 10  # YÜZDE %10
+BALINA_HACIM_ESIGI = 10  # %10
 
 def get_coin_data(coin_id):
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
     response = requests.get(url)
     if response.status_code != 200:
+        print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
     data = response.json()
     prices = [x[1] for x in data["prices"]]
@@ -44,20 +47,13 @@ def analyze_coin(coin_id):
     last_row = df.iloc[-1]
     prev_row = df.iloc[-2]
 
-    # RSI yorumu
     rsi_durum = "🔼 Boğa" if last_row["rsi"] > 50 else "🔽 Ayı"
-    
-    # EMA yorumu
     ema_durum = "🔼 Boğa" if last_row["price"] > last_row["ema20"] else "🔽 Ayı"
-
-    # MACD yorumu
     macd_durum = "🔼 Boğa" if last_row["macd"] > 0 else "🔽 Ayı"
 
-    # Ortalama yön
     boğa_puanı = sum(x == "🔼 Boğa" for x in [rsi_durum, ema_durum, macd_durum])
     piyasa_yonu = "🚀 Genel Yön: Boğa" if boğa_puanı >= 2 else "🐻 Genel Yön: Ayı"
 
-    # Hacim ve fiyat artışı kontrolü (balina sinyali)
     fiyat_degisim = ((last_row["price"] - prev_row["price"]) / prev_row["price"]) * 100
     hacim_degisim = ((last_row["volume"] - prev_row["volume"]) / prev_row["volume"]) * 100
 
@@ -73,28 +69,36 @@ def send_telegram_message(message):
         print(f"Telegram hatası: {e}")
 
 def load_coin_list():
-    with open(COIN_LIST_FILE, "r") as file:
-        return [line.strip() for line in file.readlines() if line.strip()]
+    try:
+        with open(COIN_LIST_FILE, "r") as file:
+            return [line.strip() for line in file.readlines() if line.strip()]
+    except Exception as e:
+        print(f"Coin listesi yüklenemedi: {e}")
+        return []
 
 def main():
+    print("🔁 Coin tarama fonksiyonu çalıştı.")
     coin_list = load_coin_list()
     sinyal_gonderildi = False
 
     for coin_id in coin_list:
+        print(f"⏳ Analiz başlıyor: {coin_id}")
         sinyal = analyze_coin(coin_id)
         if sinyal:
+            print(f"📬 Sinyal gönderiliyor: {coin_id}")
             send_telegram_message(sinyal)
             sinyal_gonderildi = True
             time.sleep(1)
 
     if not sinyal_gonderildi:
+        print("📭 Sinyal yok, boş mesaj gönderiliyor.")
         send_telegram_message("📡 Saatlik tarama yapıldı, sinyale rastlanmadı.")
 
 if __name__ == "__main__":
     while True:
         now = datetime.utcnow()
         if now.minute == 0 and now.second < 10:
-            print("✅ Tarama başladı...")  # Log için eklendi
+            print(f"✅ Tarama başladı: {now}")
             main()
             time.sleep(60)
         else:
