@@ -1,13 +1,13 @@
-import time
+import asyncio
 from telegram import Bot
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-def send_start_message():
+async def send_start_message():
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="✅ Jarvis bot başlatıldı!")
+    await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="✅ Jarvis bot başlatıldı!")
 
 if __name__ == "__main__":
-    send_start_message()
+    asyncio.run(send_start_message())
     print("Jarvis bot çalışıyor...")
     while True:
-        time.sleep(60)
+        pass  # veya time.sleep(60) koyabilirsin ama async kodda gerek yok şimdilik
