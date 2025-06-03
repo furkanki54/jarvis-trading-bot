@@ -1,5 +1,5 @@
 pandas
 requests
+aiohttp
 pyTelegramBotAPI==4.14.1
 ta
-aiohttp
