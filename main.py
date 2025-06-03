@@ -94,6 +94,7 @@ if __name__ == "__main__":
     while True:
         now = datetime.utcnow()
         if now.minute == 0 and now.second < 10:
+            print("✅ Tarama başladı...")  # Log için eklendi
             main()
             time.sleep(60)
         else:
