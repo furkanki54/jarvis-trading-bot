@@ -86,14 +86,15 @@ def main():
     coin_list = load_coin_list()
     sinyal_gonderildi = False
 
-    for coin_id in coin_list:
+    # Sadece ilk 10 coin ile test
+    for coin_id in coin_list[:10]:
         print(f"⏳ Analiz başlıyor: {coin_id}")
         sinyal = analyze_coin(coin_id)
         if sinyal:
             print(f"📬 Sinyal bulundu: {coin_id}")
             send_telegram_message(sinyal)
             sinyal_gonderildi = True
-            time.sleep(1)
+        time.sleep(100)  # Coin başına 100 saniye bekle (rate-limit koruması)
 
     if not sinyal_gonderildi:
         print("📭 Sinyal yok, Telegram'a bilgi verildi.")
@@ -106,4 +107,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # test amaçlı sık tarama
+        time.sleep(10)  # döngüler arası kısa bekleme (isteğe bağlı)
