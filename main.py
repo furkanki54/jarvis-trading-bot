@@ -6,11 +6,12 @@ from datetime import datetime
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COINGECKO_API_KEY
 
 print("📦 Bot başlatılıyor...")
 
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
+
 COIN_LIST_FILE = "coin_list_500_sample.txt"
 
 def get_coin_data(coin_id):
@@ -21,9 +22,10 @@ def get_coin_data(coin_id):
         "interval": "hourly"
     }
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0",
+        "x-cg-pro-api-key": COINGECKO_API_KEY
     }
-    response = requests.get(url, params=params, headers=headers)
+    response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
@@ -31,11 +33,14 @@ def get_coin_data(coin_id):
     prices = [x[1] for x in data["prices"]]
     volumes = [x[1] for x in data["total_volumes"]]
     timestamps = [x[0] for x in data["prices"]]
-    return pd.DataFrame({
+
+    df = pd.DataFrame({
         "timestamp": pd.to_datetime(timestamps, unit="ms"),
         "price": prices,
         "volume": volumes
     })
+
+    return df
 
 def analyze_coin(coin_id):
     df = get_coin_data(coin_id)
@@ -59,9 +64,9 @@ def analyze_coin(coin_id):
     fiyat_degisim = ((last_row["price"] - prev_row["price"]) / prev_row["price"]) * 100
     hacim_degisim = ((last_row["volume"] - prev_row["volume"]) / prev_row["volume"]) * 100
 
-    print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
+    print(f"📊 {coin_id}: Fiyat %{fiyat_degisim:.2f}, Hacim %{hacim_degisim:.2f}")
 
-    if fiyat_degisim > 0.15 and hacim_degisim > 2:
+    if fiyat_degisim > 0.05 and hacim_degisim > 1:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
@@ -86,15 +91,14 @@ def main():
     coin_list = load_coin_list()
     sinyal_gonderildi = False
 
-    # Sadece ilk 10 coin ile test
-    for coin_id in coin_list[:10]:
+    for coin_id in coin_list:
         print(f"⏳ Analiz başlıyor: {coin_id}")
         sinyal = analyze_coin(coin_id)
         if sinyal:
             print(f"📬 Sinyal bulundu: {coin_id}")
             send_telegram_message(sinyal)
             sinyal_gonderildi = True
-        time.sleep(100)  # Coin başına 100 saniye bekle (rate-limit koruması)
+            time.sleep(1)
 
     if not sinyal_gonderildi:
         print("📭 Sinyal yok, Telegram'a bilgi verildi.")
@@ -107,4 +111,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # döngüler arası kısa bekleme (isteğe bağlı)
+        time.sleep(100)
