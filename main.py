@@ -17,7 +17,8 @@ BALINA_HACIM_ESIGI = 10  # %10 hacim artışı
 
 def get_coin_data(coin_id):
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    response = requests.get(url)
+    headers = {"User-Agent": "Mozilla/5.0"}  # Zorunlu hale geldi
+    response = requests.get(url, headers=headers)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
@@ -101,4 +102,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # Test modu: 10 saniyede bir analiz yap
+        time.sleep(10)  # Test modu
