@@ -6,7 +6,7 @@ from datetime import datetime
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COINGECKO_API_KEY
 
 print("📦 Bot başlatılıyor...")
 
@@ -15,9 +15,15 @@ bot = TeleBot(TELEGRAM_BOT_TOKEN)
 COIN_LIST_FILE = "coin_list_500_sample.txt"
 
 def get_coin_data(coin_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    headers = {"User-Agent": "Mozilla/5.0"}  # CoinGecko artık istiyor
-    response = requests.get(url, headers=headers)
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+    params = {
+        "vs_currency": "usd",
+        "days": "1",
+        "interval": "hourly",
+        "x_cg_demo_api_key": COINGECKO_API_KEY
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
@@ -103,4 +109,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # Test modu – 10 saniyede bir
+        time.sleep(10)  # Test modu – 10 saniyede bir çalışır
