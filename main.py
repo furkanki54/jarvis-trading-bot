@@ -6,12 +6,11 @@ from datetime import datetime
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COINGECKO_API_KEY
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 print("📦 Bot başlatılıyor...")
 
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
-
 COIN_LIST_FILE = "coin_list_500_sample.txt"
 
 def get_coin_data(coin_id):
@@ -22,10 +21,9 @@ def get_coin_data(coin_id):
         "interval": "hourly"
     }
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "x-cg-demo-api-key": COINGECKO_API_KEY
+        "User-Agent": "Mozilla/5.0"
     }
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, params=params, headers=headers)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
@@ -33,14 +31,11 @@ def get_coin_data(coin_id):
     prices = [x[1] for x in data["prices"]]
     volumes = [x[1] for x in data["total_volumes"]]
     timestamps = [x[0] for x in data["prices"]]
-
-    df = pd.DataFrame({
+    return pd.DataFrame({
         "timestamp": pd.to_datetime(timestamps, unit="ms"),
         "price": prices,
         "volume": volumes
     })
-
-    return df
 
 def analyze_coin(coin_id):
     df = get_coin_data(coin_id)
@@ -66,7 +61,7 @@ def analyze_coin(coin_id):
 
     print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
 
-    if fiyat_degisim > 0.05 and hacim_degisim > 1:
+    if fiyat_degisim > 0.15 and hacim_degisim > 2:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
@@ -111,4 +106,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # Test modu – 10 saniyede bir çalışır
+        time.sleep(10)  # test amaçlı sık tarama
