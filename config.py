@@ -1,3 +1,7 @@
+# config.py
+
 TELEGRAM_BOT_TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
 TELEGRAM_CHAT_ID = "-1002549376225"
-COINGECKO_API_KEY = "CG-tYRF9ER6dSK1KnR1iLqFa84X"
+
+BINANCE_API_BASE = "https://api.binance.com"
+COIN_LIST_FILE = "coin_list_binance.txt"
