@@ -58,7 +58,7 @@ def analyze_coin(coin_id):
 
     print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
 
-    if fiyat_degisim > 0.5 and hacim_degisim > 5:
+      if fiyat_degisim > 0.15 and hacim_degisim > 2:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
