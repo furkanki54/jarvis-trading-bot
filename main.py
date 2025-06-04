@@ -13,11 +13,10 @@ print("📦 Bot başlatılıyor...")
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
 
 COIN_LIST_FILE = "coin_list_500_sample.txt"
-BALINA_HACIM_ESIGI = 10  # %10 hacim artışı
 
 def get_coin_data(coin_id):
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    headers = {"User-Agent": "Mozilla/5.0"}  # Zorunlu hale geldi
+    headers = {"User-Agent": "Mozilla/5.0"}  # CoinGecko zorunlu kıldı
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
@@ -57,7 +56,9 @@ def analyze_coin(coin_id):
     fiyat_degisim = ((last_row["price"] - prev_row["price"]) / prev_row["price"]) * 100
     hacim_degisim = ((last_row["volume"] - prev_row["volume"]) / prev_row["volume"]) * 100
 
-    if fiyat_degisim > 5 and hacim_degisim > BALINA_HACIM_ESIGI:
+    print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
+
+    if fiyat_degisim > 0.5 and hacim_degisim > 5:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
@@ -102,4 +103,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # Test modu
+        time.sleep(10)  # Test modu: 10 saniyede bir çalışır
