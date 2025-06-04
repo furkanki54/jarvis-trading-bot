@@ -16,7 +16,7 @@ COIN_LIST_FILE = "coin_list_500_sample.txt"
 
 def get_coin_data(coin_id):
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    headers = {"User-Agent": "Mozilla/5.0"}  # CoinGecko zorunlu kıldı
+    headers = {"User-Agent": "Mozilla/5.0"}  # CoinGecko artık istiyor
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
@@ -58,7 +58,7 @@ def analyze_coin(coin_id):
 
     print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
 
-      if fiyat_degisim > 0.15 and hacim_degisim > 2:
+    if fiyat_degisim > 0.15 and hacim_degisim > 2:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
@@ -103,4 +103,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(10)  # Test modu: 10 saniyede bir çalışır
+        time.sleep(10)  # Test modu – 10 saniyede bir
