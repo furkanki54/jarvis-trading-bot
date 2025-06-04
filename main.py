@@ -1,6 +1,3 @@
-import os
-os.system("pip install -r requirements.txt")
-
 import requests
 import pandas as pd
 import numpy as np
@@ -9,12 +6,11 @@ from datetime import datetime
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 print("📦 Bot başlatılıyor...")
 
-TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
-CHAT_ID = "-1002549376225"
-bot = TeleBot(TOKEN)
+bot = TeleBot(TELEGRAM_BOT_TOKEN)
 
 COIN_LIST_FILE = "coin_list_500_sample.txt"
 BALINA_HACIM_ESIGI = 10  # %10 hacim artışı
@@ -67,7 +63,7 @@ def analyze_coin(coin_id):
 
 def send_telegram_message(message):
     try:
-        bot.send_message(chat_id=CHAT_ID, text=message)
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         print("📤 Telegram mesajı gönderildi.")
     except Exception as e:
         print(f"Telegram hatası: {e}")
