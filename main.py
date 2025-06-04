@@ -6,96 +6,95 @@ from datetime import datetime
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COINGECKO_API_KEY
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BINANCE_API_BASE, COIN_LIST_FILE
 
 print("📦 Bot başlatılıyor...")
 
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
-COIN_LIST_FILE = "coin_list_500_sample.txt"
 
-def get_coin_data(coin_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+def get_binance_data(symbol):
+    url = f"{BINANCE_API_BASE}/api/v3/klines"
     params = {
-        "vs_currency": "usd",
-        "days": "1",
-        "interval": "hourly"
+        "symbol": symbol,
+        "interval": "1m",
+        "limit": 3
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "x-cg-pro-api-key": COINGECKO_API_KEY
-    }
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
+        print(f"❌ {symbol} verisi alınamadı! HTTP: {response.status_code}")
         return None
+
     data = response.json()
-    prices = [x[1] for x in data["prices"]]
-    volumes = [x[1] for x in data["total_volumes"]]
-    timestamps = [x[0] for x in data["prices"]]
-    df = pd.DataFrame({
-        "timestamp": pd.to_datetime(timestamps, unit="ms"),
-        "price": prices,
-        "volume": volumes
-    })
+    df = pd.DataFrame(data, columns=[
+        "timestamp", "open", "high", "low", "close", "volume", "_",
+        "_", "_", "_", "_", "_"
+    ])
+    df["close"] = df["close"].astype(float)
+    df["volume"] = df["volume"].astype(float)
     return df
 
-def analyze_coin(coin_id):
-    df = get_coin_data(coin_id)
-    if df is None or len(df) < 20:
+def analyze_coin(symbol):
+    df = get_binance_data(symbol)
+    if df is None or len(df) < 3:
         return None
-    df["ema20"] = EMAIndicator(close=df["price"], window=20).ema_indicator()
-    df["macd"] = MACD(close=df["price"]).macd_diff()
-    df["rsi"] = RSIIndicator(close=df["price"]).rsi()
-    last_row = df.iloc[-1]
-    prev_row = df.iloc[-2]
-    rsi_durum = "🔼 Boğa" if last_row["rsi"] > 50 else "🔽 Ayı"
-    ema_durum = "🔼 Boğa" if last_row["price"] > last_row["ema20"] else "🔽 Ayı"
-    macd_durum = "🔼 Boğa" if last_row["macd"] > 0 else "🔽 Ayı"
-    boğa_puanı = sum(x == "🔼 Boğa" for x in [rsi_durum, ema_durum, macd_durum])
-    piyasa_yonu = "🚀 Genel Yön: Boğa" if boğa_puanı >= 2 else "🐻 Genel Yön: Ayı"
-    fiyat_degisim = ((last_row["price"] - prev_row["price"]) / prev_row["price"]) * 100
-    hacim_degisim = ((last_row["volume"] - prev_row["volume"]) / prev_row["volume"]) * 100
-    print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
-    if fiyat_degisim > 0.05 and hacim_degisim > 0.5:
-        return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
-    return None
 
-def send_telegram_message(message):
-    try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        print("📤 Telegram mesajı gönderildi.")
-    except Exception as e:
-        print(f"Telegram hatası: {e}")
+    df["ema"] = EMAIndicator(close=df["close"], window=3).ema_indicator()
+    df["macd"] = MACD(close=df["close"]).macd_diff()
+    df["rsi"] = RSIIndicator(close=df["close"]).rsi()
+
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    price_change = ((last["close"] - prev["close"]) / prev["close"]) * 100
+    volume_change = ((last["volume"] - prev["volume"]) / prev["volume"]) * 100
+
+    if price_change > 0.05 and volume_change > 0.5:
+        return f"📈 SİNYAL: {symbol}\n💰 Fiyat: %{price_change:.2f}\n📊 Hacim: %{volume_change:.2f}\nRSI: {last['rsi']:.1f} MACD: {last['macd']:.2f} EMA: {last['ema']:.2f}"
+    return None
 
 def load_coin_list():
     try:
         with open(COIN_LIST_FILE, "r") as file:
             return [line.strip() for line in file.readlines() if line.strip()]
     except Exception as e:
-        print(f"Coin listesi yüklenemedi: {e}")
+        print(f"Liste yüklenemedi: {e}")
         return []
 
+def send_message(msg):
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, msg)
+        print("📤 Telegram'a mesaj gönderildi.")
+    except Exception as e:
+        print(f"Telegram Hatası: {e}")
+
 def main():
-    print("🔁 Coin tarama fonksiyonu çalıştı.")
+    print(f"🔁 Tarama başlatıldı: {datetime.utcnow()}")
     coin_list = load_coin_list()
-    sinyal_gonderildi = False
-    for coin_id in coin_list:
-        print(f"⏳ Analiz başlıyor: {coin_id}")
-        sinyal = analyze_coin(coin_id)
-        if sinyal:
-            print(f"📬 Sinyal bulundu: {coin_id}")
-            send_telegram_message(sinyal)
-            sinyal_gonderildi = True
+    signal_sent = False
+
+    for symbol in coin_list:
+        print(f"🔍 İnceleniyor: {symbol}")
+        result = analyze_coin(symbol)
+        if result:
+            send_message(result)
+            signal_sent = True
             time.sleep(1)
-    if not sinyal_gonderildi:
-        print("📭 Sinyal yok, Telegram'a bilgi verildi.")
-        send_telegram_message("📡 Saatlik tarama yapıldı, sinyale rastlanmadı.")
+
+    if not signal_sent:
+        send_message("📡 Tarama tamamlandı, sinyal yok.")
 
 if __name__ == "__main__":
     while True:
         try:
-            print(f"✅ Tarama başlıyor: {datetime.utcnow()}")
             main()
+            time.sleep(60)
         except Exception as e:
-            print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(100)
+            print(f"🚨 Ana hata: {e}")
+            time.sleep(10)
+"""
+
+tools.display_dataframe_to_user(name="Dosya İçerikleri", dataframe=pd.DataFrame({
+    "Dosya Adı": ["requirements.txt", "main.py"],
+    "İçerik": [requirements.strip(), main_code.strip()]
+}))
+    
