@@ -18,12 +18,13 @@ def get_coin_data(coin_id):
     params = {
         "vs_currency": "usd",
         "days": "1",
-        "interval": "minutely",  # 5 dakikalık veri
-        "x_cg_pro_api_key": COINGECKO_API_KEY
+        "interval": "minutely"
     }
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "x-cg-pro-api-key": COINGECKO_API_KEY
+    }
     response = requests.get(url, headers=headers, params=params)
-
     if response.status_code != 200:
         print(f"❌ {coin_id} verisi alınamadı! HTTP: {response.status_code}")
         return None
@@ -43,7 +44,7 @@ def get_coin_data(coin_id):
 
 def analyze_coin(coin_id):
     df = get_coin_data(coin_id)
-    if df is None or len(df) < 3:
+    if df is None or len(df) < 20:
         return None
 
     df["ema20"] = EMAIndicator(close=df["price"], window=20).ema_indicator()
@@ -56,15 +57,16 @@ def analyze_coin(coin_id):
     rsi_durum = "🔼 Boğa" if last_row["rsi"] > 50 else "🔽 Ayı"
     ema_durum = "🔼 Boğa" if last_row["price"] > last_row["ema20"] else "🔽 Ayı"
     macd_durum = "🔼 Boğa" if last_row["macd"] > 0 else "🔽 Ayı"
+
     boğa_puanı = sum(x == "🔼 Boğa" for x in [rsi_durum, ema_durum, macd_durum])
     piyasa_yonu = "🚀 Genel Yön: Boğa" if boğa_puanı >= 2 else "🐻 Genel Yön: Ayı"
 
     fiyat_degisim = ((last_row["price"] - prev_row["price"]) / prev_row["price"]) * 100
     hacim_degisim = ((last_row["volume"] - prev_row["volume"]) / prev_row["volume"]) * 100
 
-    print(f"📊 {coin_id}: Fiyat %{fiyat_degisim:.3f}, Hacim %{hacim_degisim:.3f}")
+    print(f"📊 {coin_id}: Fiyat % {fiyat_degisim:.2f}, Hacim % {hacim_degisim:.2f}")
 
-    if fiyat_degisim > 0.01 and hacim_degisim > 0.5:
+    if fiyat_degisim > 0.10 and hacim_degisim > 2:
         return f"📈 BALİNA SİNYALİ!\n🪙 Coin: {coin_id.upper()}\n💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n📊 Hacim Değişimi: %{hacim_degisim:.2f}\n\n{rsi_durum} | {ema_durum} | {macd_durum}\n{piyasa_yonu}"
 
     return None
@@ -96,11 +98,11 @@ def main():
             print(f"📬 Sinyal bulundu: {coin_id}")
             send_telegram_message(sinyal)
             sinyal_gonderildi = True
-            time.sleep(1)
+        time.sleep(2)  # Rate limit yememek için bekleme
 
     if not sinyal_gonderildi:
         print("📭 Sinyal yok, Telegram'a bilgi verildi.")
-        send_telegram_message("📡 Tarama yapıldı, sinyale rastlanmadı.")
+        send_telegram_message("📡 Saatlik tarama yapıldı, sinyale rastlanmadı.")
 
 if __name__ == "__main__":
     while True:
@@ -109,4 +111,4 @@ if __name__ == "__main__":
             main()
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(100)
+        time.sleep(100)  # 100 saniyede bir tekrar çalıştır
