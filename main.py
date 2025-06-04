@@ -96,10 +96,9 @@ def main():
 
 if __name__ == "__main__":
     while True:
-        now = datetime.utcnow()
-        if now.minute == 0 and now.second < 10:
-            print(f"✅ Tarama başlıyor: {now}")
+        try:
+            print(f"✅ Tarama başlıyor: {datetime.utcnow()}")
             main()
-            time.sleep(60)
-        else:
-            time.sleep(5)
+        except Exception as e:
+            print(f"🚨 Ana döngü hatası: {e}")
+        time.sleep(10)  # Test modu: 10 saniyede bir analiz yap
