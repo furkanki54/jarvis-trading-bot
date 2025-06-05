@@ -8,127 +8,120 @@ from ta.trend import EMAIndicator, MACD
 from telebot import TeleBot
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-print("📦 Bot başlatılıyor...")
-
+print("🚀 Bot başlatılıyor...")
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
 
-COIN_LIST_FILE = "coin_list_500_sample.txt"
+COIN_LIST_FILE = "coin_list_binance.txt"
+THRESHOLD_FIYAT = 0.1  # %0.1
+THRESHOLD_HACIM = 1    # %1
 
-def get_coin_data(symbol):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol.upper()}USDT&interval=1h&limit=50"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+def get_binance_ohlcv(symbol):
+    url = f"https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": symbol.upper(),
+        "interval": "1h",
+        "limit": 100
+    }
+    response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"❌ {symbol} verisi alınamadı! HTTP: {response.status_code}")
+        print(f"❌ {symbol} verisi alınamadı.")
         return None
     data = response.json()
     df = pd.DataFrame(data, columns=[
         "timestamp", "open", "high", "low", "close", "volume",
         "close_time", "quote_asset_volume", "number_of_trades",
-        "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"
+        "taker_buy_base", "taker_buy_quote", "ignore"
     ])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df["price"] = df["close"].astype(float)
+    df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
-    return df[["timestamp", "price", "volume"]]
+    return df[["timestamp", "close", "volume"]]
 
-def analyze_coin(symbol):
-    df = get_coin_data(symbol)
-    if df is None or len(df) < 30:
-        return None
-
-    df["ema50"] = EMAIndicator(close=df["price"], window=50).ema_indicator()
-    df["ema200"] = EMAIndicator(close=df["price"], window=200, fillna=True).ema_indicator()
-    df["macd"] = MACD(close=df["price"]).macd()
-    df["macd_signal"] = MACD(close=df["price"]).macd_signal()
-    df["rsi"] = RSIIndicator(close=df["price"]).rsi()
+def teknik_analiz(df):
+    df["ema20"] = EMAIndicator(close=df["close"], window=20).ema_indicator()
+    df["macd"] = MACD(close=df["close"]).macd_diff()
+    df["rsi"] = RSIIndicator(close=df["close"]).rsi()
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # Golden / Death Cross
-    if last["ema50"] > last["ema200"]:
-        cross_status = "🔔 Golden Cross: EMA50 > EMA200"
-    elif last["ema50"] < last["ema200"]:
-        cross_status = "⚠️ Death Cross: EMA50 < EMA200"
-    else:
-        cross_status = "➖ Kesişim Yok"
+    fiyat_degisim = ((last["close"] - prev["close"]) / prev["close"]) * 100
+    hacim_degisim = ((last["volume"] - prev["volume"]) / prev["volume"]) * 100
 
-    # RSI Yorumu
-    if last["rsi"] > 70:
-        rsi_comment = "🔴 Aşırı Alım"
-    elif last["rsi"] < 30:
-        rsi_comment = "🟢 Aşırı Satım"
-    else:
-        rsi_comment = "⚪ Nötr"
+    rsi_durum = "🔼 Boğa" if last["rsi"] > 50 else "🔽 Ayı"
+    ema_durum = "🔼 Boğa" if last["close"] > last["ema20"] else "🔽 Ayı"
+    macd_durum = "🔼 Boğa" if last["macd"] > 0 else "🔽 Ayı"
 
-    # MACD Yorumu
-    macd_comment = "🔼 MACD Pozitif" if last["macd"] > last["macd_signal"] else "🔽 MACD Negatif"
+    boğa_puani = sum(x == "🔼 Boğa" for x in [rsi_durum, ema_durum, macd_durum])
+    piyasa_yonu = "🚀 Genel Yön: Boğa" if boğa_puani >= 2 else "🐻 Genel Yön: Ayı"
 
-    # Boğa/Ayı puanı (maksimum 5)
-    bull_score = 0
-    bull_score += 1 if last["rsi"] > 50 else 0
-    bull_score += 1 if last["ema50"] > last["ema200"] else 0
-    bull_score += 1 if last["macd"] > last["macd_signal"] else 0
-    bull_score += 1 if last["rsi"] < 70 else 0
-    bull_score += 1 if last["rsi"] > 30 else 0
-    trend_label = "🚀 Güçlü Boğa" if bull_score >= 4 else ("🐂 Orta Boğa" if bull_score == 3 else "🐻 Ayı Eğilimi")
+    analiz = (
+        f"🪙 Coin: {df.name}\n"
+        f"💰 Fiyat Değişimi: %{fiyat_degisim:.2f}\n"
+        f"📊 Hacim Değişimi: %{hacim_degisim:.2f}\n"
+        f"{rsi_durum} | {ema_durum} | {macd_durum}\n"
+        f"{piyasa_yonu} (Boğa Puanı: {boğa_puani}/3)"
+    )
 
-    # Fiyat ve hacim değişimi
-    price_change = ((last["price"] - prev["price"]) / prev["price"]) * 100
-    volume_change = ((last["volume"] - prev["volume"]) / prev["volume"]) * 100
+    if fiyat_degisim > THRESHOLD_FIYAT and hacim_degisim > THRESHOLD_HACIM:
+        analiz = "📈 BALİNA SİNYALİ!\n" + analiz
 
-    if price_change > 0.5 and volume_change > 0.05:
-        message = f"""📊 Teknik Analiz Özeti – {symbol.upper()}
-💰 Fiyat: ${last['price']:.2f}
-📉 Hacim: {last['volume']:.2f}
+    return analiz if "BALİNA SİNYALİ" in analiz else None
 
-📍 RSI: {last['rsi']:.2f} → {rsi_comment}
-📍 {cross_status}
-📍 {macd_comment}
-
-🎯 Puanlama: {bull_score}/5 → {trend_label}
-📅 Tarih: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"""
-
-        return message
-
-    return None
-
-def send_telegram_message(message):
+def send_message(msg):
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
         print("📤 Telegram mesajı gönderildi.")
     except Exception as e:
         print(f"Telegram hatası: {e}")
 
-def load_coin_list():
+def coin_listesi_yukle():
     try:
         with open(COIN_LIST_FILE, "r") as f:
-            return [line.strip() for line in f if line.strip()]
+            return [line.strip().upper() for line in f.readlines() if line.strip()]
     except Exception as e:
-        print(f"Coin listesi yüklenemedi: {e}")
+        print(f"📂 Coin listesi yüklenemedi: {e}")
         return []
 
-def main():
-    print("🔁 Tarama başlatıldı...")
-    coin_list = load_coin_list()
-    sinyal_geldi = False
+def main_loop():
+    print(f"🔁 Tarama başladı: {datetime.now()}")
+    coin_list = coin_listesi_yukle()
+    sinyal_var = False
 
     for coin in coin_list:
-        print(f"⏳ {coin} analiz ediliyor...")
-        sinyal = analyze_coin(coin)
-        if sinyal:
-            send_telegram_message(sinyal)
-            sinyal_geldi = True
-            time.sleep(1)
+        df = get_binance_ohlcv(coin)
+        if df is None or len(df) < 30:
+            continue
+        df.name = coin
+        mesaj = teknik_analiz(df)
+        if mesaj:
+            send_message(mesaj)
+            sinyal_var = True
+        time.sleep(1)
 
-    if not sinyal_geldi:
-        send_telegram_message("📡 Tarama yapıldı, sinyale rastlanmadı.")
+    if not sinyal_var:
+        send_message("📡 Saatlik tarama tamamlandı, sinyal bulunamadı.")
+
+@bot.message_handler(func=lambda msg: True)
+def manuel_analiz(mesaj):
+    coin = mesaj.text.strip().upper()
+    if not coin.endswith("USDT"):
+        return
+    df = get_binance_ohlcv(coin)
+    if df is None or len(df) < 30:
+        bot.reply_to(mesaj, f"❌ {coin} verisi alınamadı.")
+        return
+    df.name = coin
+    analiz = teknik_analiz(df)
+    bot.reply_to(mesaj, analiz if analiz else "📭 Teknik analiz tamamlandı, sinyal yok.")
 
 if __name__ == "__main__":
+    import threading
+    threading.Thread(target=bot.polling, daemon=True).start()
     while True:
         try:
-            main()
+            main_loop()
+            time.sleep(3600)  # 1 saatte bir tarama
         except Exception as e:
             print(f"🚨 Ana döngü hatası: {e}")
-        time.sleep(60)  # her 1 dakikada bir çalışır
+            time.sleep(60)
