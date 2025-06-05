@@ -1,7 +1,7 @@
-# config.py
+import os
 
-TELEGRAM_TOKEN = "7759276451:AAF0Xphio-TjtYyFIzahQrG3fU-qdNQuBEw"
-TELEGRAM_CHAT_ID = "-1002549376225"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 BINANCE_API_BASE = "https://api.binance.com"
 COIN_LIST_FILE = "coin_list_binance.txt"
