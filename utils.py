@@ -68,3 +68,18 @@ def analyze_indicators(df):
     ema_msg = "EMA: Boğa (📈)" if ema_short > ema_long else "EMA: Ayı (📉)"
 
     return f"{rsi_msg}\n{macd_msg}\n{ema_msg}"
+
+def analyze_price_volume(df, price_threshold=3.0, volume_threshold=50.0):
+    if len(df) < 2:
+        return None
+
+    latest = df.iloc[-1]
+    previous = df.iloc[-2]
+
+    price_change = ((latest["close"] - previous["close"]) / previous["close"]) * 100
+    volume_change = ((latest["volume"] - previous["volume"]) / previous["volume"]) * 100
+
+    if abs(price_change) >= price_threshold and abs(volume_change) >= volume_threshold:
+        direction = "yükseliş" if price_change > 0 else "düşüş"
+        return f"🚨 Anormal Hacim & Fiyat {direction.upper()} 🚨\nFiyat değişimi: %{price_change:.2f}, Hacim değişimi: %{volume_change:.2f}"
+    return None
