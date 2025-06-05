@@ -1,76 +1,61 @@
-import requests
-import pandas as pd
+from telebot import TeleBot
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+from utils import (
+    load_coin_list,
+    get_binance_data,
+    calculate_rsi,
+    calculate_macd,
+    calculate_ema,
+    analyze_indicators,
+    analyze_price_volume,
+)
 
-def get_binance_data(symbol, interval="1h", limit=100):
-    url = f"https://api.binance.com/api/v3/klines"
-    params = {
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit
-    }
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
-        df = pd.DataFrame(data, columns=[
-            "timestamp", "open", "high", "low", "close", "volume",
-            "close_time", "quote_asset_volume", "number_of_trades",
-            "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
-        ])
-        df["close"] = pd.to_numeric(df["close"])
-        df["volume"] = pd.to_numeric(df["volume"])
-        return df
-    except Exception as e:
-        print(f"Hata (get_binance_data): {e}")
-        return None
+bot = TeleBot(TELEGRAM_TOKEN)
+coin_list = load_coin_list("coin_list_binance.txt")
 
-def calculate_rsi(df, period=14):
-    delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+@bot.message_handler(commands=["start"])
+def send_welcome(message):
+    bot.send_message(message.chat.id, "👋 Merhaba! Coin ismini yazarak analiz alabilirsin. (örn: BTCUSDT)")
 
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
+@bot.message_handler(func=lambda message: True)
+def handle_user_msg(message):
+    symbol = message.text.strip().upper()
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
 
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    latest_rsi = rsi.iloc[-1]
+    if symbol not in coin_list:
+        bot.send_message(message.chat.id, f"❌ {symbol} analiz listesinde bulunamadı.")
+        return
 
-    if latest_rsi > 70:
-        return "🔽 Ayı"
-    elif latest_rsi < 30:
-        return "🔼 Boğa"
+    intervals = ["15m", "1h", "4h"]
+    interval_names = {"15m": "15 Dakika", "1h": "1 Saat", "4h": "4 Saat"}
+    responses = []
+
+    for interval in intervals:
+        df = get_binance_data(symbol, interval)
+        if df is None or df.empty:
+            continue
+
+        rsi_status = calculate_rsi(df)
+        macd_status = calculate_macd(df)
+        ema_status = calculate_ema(df)
+        boğa_puanı = [rsi_status, macd_status, ema_status].count("📈 Boğa")
+
+        genel_yön = "📈 Boğa" if boğa_puanı >= 2 else "📉 Ayı"
+
+        mesaj = (
+            f"📊 *{symbol} - {interval_names[interval]}*\n"
+            f"RSI: {rsi_status}\n"
+            f"MACD: {macd_status}\n"
+            f"EMA: {ema_status}\n"
+            f"Genel Yön: {genel_yön} (Boğa Puanı: {boğa_puanı}/3)"
+        )
+        responses.append(mesaj)
+
+    if responses:
+        for m in responses:
+            bot.send_message(message.chat.id, m, parse_mode="Markdown")
     else:
-        return "⏸ Nötr"
+        bot.send_message(message.chat.id, f"🔍 {symbol} için teknik analiz yapılamadı.")
 
-def calculate_macd(df, short=12, long=26, signal=9):
-    short_ema = df["close"].ewm(span=short, adjust=False).mean()
-    long_ema = df["close"].ewm(span=long, adjust=False).mean()
-    macd = short_ema - long_ema
-    signal_line = macd.ewm(span=signal, adjust=False).mean()
-
-    if macd.iloc[-1] > signal_line.iloc[-1]:
-        return "🔼 Boğa"
-    elif macd.iloc[-1] < signal_line.iloc[-1]:
-        return "🔽 Ayı"
-    else:
-        return "⏸ Nötr"
-
-def calculate_ema(df, period=50):
-    ema = df["close"].ewm(span=period, adjust=False).mean()
-    current_price = df["close"].iloc[-1]
-    current_ema = ema.iloc[-1]
-
-    if current_price > current_ema:
-        return "🔼 Boğa"
-    elif current_price < current_ema:
-        return "🔽 Ayı"
-    else:
-        return "⏸ Nötr"
-
-def load_coin_list(filename="coin_list_updated.txt"):
-    try:
-        with open(filename, "r") as f:
-            return [line.strip().upper() for line in f if line.strip()]
-    except FileNotFoundError:
-        print(f"{filename} bulunamadı.")
-        return []
+bot.polling(non_stop=True)
