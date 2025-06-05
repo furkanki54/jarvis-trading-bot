@@ -1,94 +1,99 @@
 import time
 import requests
-import pandas as pd
 from telebot import TeleBot
 from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, BINANCE_API_BASE, COIN_LIST_FILE
-from utils import get_binance_data, calculate_rsi, calculate_macd, calculate_ema, load_coin_list
+from utils import (
+    get_binance_data,
+    calculate_rsi,
+    calculate_macd,
+    calculate_ema,
+    load_coin_list,
+    detect_golden_cross,
+    detect_death_cross
+)
 
 bot = TeleBot(TELEGRAM_TOKEN)
 coin_list = load_coin_list(COIN_LIST_FILE)
 
-VOLUME_THRESHOLD = 50  # % olarak
-PRICE_THRESHOLD = 3  # % olarak
+VOLUME_THRESHOLD = 50  # %50 hacim artışı
+PRICE_THRESHOLD = 3    # %3 fiyat değişimi
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
 
-def check_coin(symbol):
-    df = get_binance_data(symbol)
-    if df is None or len(df) < 2:
-        return None
+def analyze_coin(symbol):
+    message_lines = []
+    intervals = ["15m", "1h", "4h"]
 
-    latest = df.iloc[-1]
-    previous = df.iloc[-2]
+    for interval in intervals:
+        try:
+            data = get_binance_data(symbol, interval)
+            closes = [float(candle[4]) for candle in data]
+            rsi = calculate_rsi(closes)
+            macd_line, signal_line = calculate_macd(closes)
+            ema50 = calculate_ema(closes, 50)
+            ema200 = calculate_ema(closes, 200)
 
-    price_change = ((latest["close"] - previous["close"]) / previous["close"]) * 100
-    volume_change = ((latest["volume"] - previous["volume"]) / previous["volume"]) * 100
+            # RSI yorumu
+            rsi_msg = f"RSI({interval}): {rsi:.2f}"
+            if rsi >= RSI_OVERBOUGHT:
+                rsi_msg += " 🔴 Aşırı Alım"
+            elif rsi <= RSI_OVERSOLD:
+                rsi_msg += " 🟢 Aşırı Satım"
+            message_lines.append(rsi_msg)
 
-    signal = ""
-    if price_change > PRICE_THRESHOLD and volume_change > VOLUME_THRESHOLD:
-        signal = "📈 Fiyat ve hacimde yükseliş!"
-    elif price_change < -PRICE_THRESHOLD and volume_change > VOLUME_THRESHOLD:
-        signal = "📉 Fiyat düşüyor ama hacim artıyor!"
-    elif volume_change > VOLUME_THRESHOLD:
-        signal = "🐋 Yüksek hacim artışı tespit edildi!"
+            # MACD yorumu
+            macd_msg = f"MACD({interval}): {'🟢 Al Sinyali' if macd_line > signal_line else '🔴 Sat Sinyali'}"
+            message_lines.append(macd_msg)
 
-    if signal:
-        rsi = calculate_rsi(df).iloc[-1]
-        macd, signal_line = calculate_macd(df)
-        macd_val = macd.iloc[-1]
-        signal_val = signal_line.iloc[-1]
-        ema = calculate_ema(df).iloc[-1]
-        trend = "📊 Trend: Yukarı" if latest["close"] > ema else "📊 Trend: Aşağı"
+            # Golden/Death Cross
+            if detect_golden_cross(ema50, ema200):
+                message_lines.append(f"Golden Cross ({interval}) 🔔")
+            elif detect_death_cross(ema50, ema200):
+                message_lines.append(f"Death Cross ({interval}) ⚠️")
 
-        return f"🚨 Sinyal: {symbol}\n{signal}\n\nRSI: {rsi:.2f}\nMACD: {macd_val:.4f}\nEMA: {ema:.2f}\n{trend}"
-    return None
+        except Exception as e:
+            message_lines.append(f"{interval} verileri alınamadı: {str(e)}")
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    symbol = message.text.strip().upper()
-    if not symbol.endswith("USDT"):
-        symbol += "USDT"
+    return "\n".join(message_lines)
 
-    if symbol in coin_list:
-        df = get_binance_data(symbol)
-        if df is None:
-            bot.reply_to(message, "Veri alınamadı.")
-            return
+def send_alert(symbol, price_change, volume_change):
+    message = (
+        f"🚨 Hacim & Fiyat Alarmı: {symbol}\n"
+        f"Fiyat Değişimi: %{price_change:.2f}\n"
+        f"Hacim Değişimi: %{volume_change:.2f}"
+    )
+    bot.send_message(TELEGRAM_CHAT_ID, message)
 
-        rsi = calculate_rsi(df).iloc[-1]
-        macd, signal_line = calculate_macd(df)
-        macd_val = macd.iloc[-1]
-        signal_val = signal_line.iloc[-1]
-        ema = calculate_ema(df).iloc[-1]
-        latest_price = df.iloc[-1]["close"]
-        trend = "Yukarı" if latest_price > ema else "Aşağı"
-
-        score = 0
-        if rsi < 30:
-            score += 1
-        elif rsi > 70:
-            score -= 1
-        if macd_val > signal_val:
-            score += 1
-        else:
-            score -= 1
-        if latest_price > ema:
-            score += 1
-        else:
-            score -= 1
-
-        bot.reply_to(message, f"📊 Teknik analiz: {symbol}\nRSI: {rsi:.2f}\nMACD: {macd_val:.4f}\nEMA: {ema:.2f}\nTrend: {trend}\nBoğa/Ayı Puanı: {score}/3")
-    else:
-        bot.reply_to(message, "Coin listede bulunamadı veya sembol hatalı.")
-
-def run_loop():
+def monitor():
+    cache = {}
     while True:
         for symbol in coin_list:
             try:
-                message = check_coin(symbol)
-                if message:
-                    bot.send_message(TELEGRAM_CHAT_ID, message)
+                data = get_binance_data(symbol, "15m")
+                current_close = float(data[-1][4])
+                current_volume = float(data[-1][5])
+
+                prev_close = float(data[-2][4])
+                prev_volume = float(data[-2][5])
+
+                price_change = ((current_close - prev_close) / prev_close) * 100
+                volume_change = ((current_volume - prev_volume) / prev_volume) * 100
+
+                if abs(price_change) >= PRICE_THRESHOLD and volume_change >= VOLUME_THRESHOLD:
+                    send_alert(symbol, price_change, volume_change)
+
             except Exception as e:
-                print(f"Hata oluştu: {symbol} - {str(e)}")
+                print(f"{symbol} için hata: {str(e)}")
         time.sleep(60)
 
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    text = message.text.strip().upper()
+    if text in coin_list:
+        result = analyze_coin(text)
+        bot.reply_to(message, f"📊 {text} Teknik Analiz:\n\n{result}")
+    else:
+        bot.reply_to(message, "Coin listesinde yok veya yanlış yazıldı.")
+
 if __name__ == "__main__":
-    run_loop()
+    monitor()
