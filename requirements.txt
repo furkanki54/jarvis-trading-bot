@@ -1,5 +1,5 @@
 requests
 pandas
 numpy
-ta
+ta==0.10.2
 pyTelegramBotAPI==4.14.1
