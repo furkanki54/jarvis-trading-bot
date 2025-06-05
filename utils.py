@@ -1,85 +1,93 @@
 import requests
 import pandas as pd
-
-def load_coin_list(filename):
-    try:
-        with open(filename, "r") as f:
-            return [line.strip().upper() for line in f if line.strip()]
-    except FileNotFoundError:
-        return []
+import numpy as np
+from datetime import datetime
 
 def get_binance_data(symbol, interval="1h", limit=100):
-    url = "https://api.binance.com/api/v3/klines"
-    params = {"symbol": symbol, "interval": interval, "limit": limit}
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, timeout=10)
         data = response.json()
-        if isinstance(data, list):
-            df = pd.DataFrame(data, columns=[
-                "timestamp", "open", "high", "low", "close", "volume",
-                "close_time", "quote_asset_volume", "number_of_trades",
-                "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
-            ])
-            df["close"] = df["close"].astype(float)
-            df["volume"] = df["volume"].astype(float)
-            return df
-        return None
-    except:
+        df = pd.DataFrame(data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_asset_volume', 'number_of_trades',
+            'taker_buy_base', 'taker_buy_quote', 'ignore'
+        ])
+        df['close'] = df['close'].astype(float)
+        df['volume'] = df['volume'].astype(float)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df
+    except Exception as e:
+        print(f"Veri çekme hatası {symbol}: {e}")
         return None
 
 def calculate_rsi(df, period=14):
-    delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-
+    delta = df['close'].diff()
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
+    avg_gain = pd.Series(gain).rolling(window=period).mean()
+    avg_loss = pd.Series(loss).rolling(window=period).mean()
     rs = avg_gain / (avg_loss + 1e-10)
     rsi = 100 - (100 / (1 + rs))
     return rsi.iloc[-1]
 
-def calculate_macd(df, short=12, long=26, signal=9):
-    short_ema = df["close"].ewm(span=short, adjust=False).mean()
-    long_ema = df["close"].ewm(span=long, adjust=False).mean()
-    macd_line = short_ema - long_ema
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    return macd_line.iloc[-1], signal_line.iloc[-1]
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    ema_fast = df['close'].ewm(span=fast).mean()
+    ema_slow = df['close'].ewm(span=slow).mean()
+    macd = ema_fast - ema_slow
+    signal_line = macd.ewm(span=signal).mean()
+    return macd.iloc[-1], signal_line.iloc[-1]
 
-def calculate_ema(df, short_period=9, long_period=21):
-    short_ema = df["close"].ewm(span=short_period, adjust=False).mean()
-    long_ema = df["close"].ewm(span=long_period, adjust=False).mean()
-    return short_ema.iloc[-1], long_ema.iloc[-1]
+def calculate_ema(df, period=50):
+    return df['close'].ewm(span=period).mean().iloc[-1]
 
-def analyze_indicators(df):
-    rsi = calculate_rsi(df)
-    macd, signal = calculate_macd(df)
-    ema_short, ema_long = calculate_ema(df)
+def load_coin_list(filename):
+    with open(filename, "r") as f:
+        return [line.strip().upper() for line in f.readlines() if line.strip()]
 
-    rsi_msg = ""
+def analyze_indicators(symbol, rsi, macd, ema):
+    messages = []
+    score = 0
+
     if rsi > 70:
-        rsi_msg = "RSI: Aşırı Alım (📈)"
+        messages.append("⚠️ RSI aşırı alım bölgesinde.")
+        score -= 1
     elif rsi < 30:
-        rsi_msg = "RSI: Aşırı Satım (📉)"
+        messages.append("✅ RSI aşırı satım bölgesinde.")
+        score += 1
+
+    if macd > 0:
+        messages.append("📈 MACD pozitif bölgede (al sinyali).")
+        score += 1
     else:
-        rsi_msg = f"RSI: {round(rsi, 2)}"
+        messages.append("📉 MACD negatif bölgede (sat sinyali).")
+        score -= 1
 
-    macd_msg = "MACD: Boğa (📈)" if macd > signal else "MACD: Ayı (📉)"
-    ema_msg = "EMA: Boğa (📈)" if ema_short > ema_long else "EMA: Ayı (📉)"
+    if score >= 2:
+        messages.append("🔔 Genel sinyal: GÜÇLÜ AL")
+    elif score <= -2:
+        messages.append("🔻 Genel sinyal: GÜÇLÜ SAT")
+    else:
+        messages.append("➖ Genel sinyal: NÖTR")
 
-    return f"{rsi_msg}\n{macd_msg}\n{ema_msg}"
+    return f"*{symbol} Teknik Analiz:*\n" + "\n".join(messages)
 
-def analyze_price_volume(df, price_threshold=3.0, volume_threshold=50.0):
-    if len(df) < 2:
-        return None
+def analyze_price_volume(symbol, df, price_threshold=3, volume_threshold=50):
+    close_now = df['close'].iloc[-1]
+    close_prev = df['close'].iloc[-2]
+    price_change = ((close_now - close_prev) / close_prev) * 100
 
-    latest = df.iloc[-1]
-    previous = df.iloc[-2]
+    volume_now = df['volume'].iloc[-1]
+    volume_prev = df['volume'].iloc[-2]
+    volume_change = ((volume_now - volume_prev) / (volume_prev + 1e-10)) * 100
 
-    price_change = ((latest["close"] - previous["close"]) / previous["close"]) * 100
-    volume_change = ((latest["volume"] - previous["volume"]) / previous["volume"]) * 100
+    messages = []
 
-    if abs(price_change) >= price_threshold and abs(volume_change) >= volume_threshold:
-        direction = "yükseliş" if price_change > 0 else "düşüş"
-        return f"🚨 Anormal Hacim & Fiyat {direction.upper()} 🚨\nFiyat değişimi: %{price_change:.2f}, Hacim değişimi: %{volume_change:.2f}"
-    return None
+    if abs(price_change) >= price_threshold and volume_change >= volume_threshold:
+        direction = "yükseldi" if price_change > 0 else "düştü"
+        messages.append(
+            f"🚨 {symbol} son mumda %{price_change:.2f} {direction}, hacim %{volume_change:.2f} arttı."
+        )
+        messages.append("🐋 Balina hareketi olabilir!")
+
+    return "\n".join(messages)
