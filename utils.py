@@ -1,48 +1,76 @@
 import requests
-import numpy as np
+import pandas as pd
 
-def get_binance_data(symbol, interval):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit=100"
-    response = requests.get(url)
-    response.raise_for_status()
-    return response.json()
+def get_binance_data(symbol, interval="1h", limit=100):
+    url = f"https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": symbol,
+        "interval": interval,
+        "limit": limit
+    }
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        df = pd.DataFrame(data, columns=[
+            "timestamp", "open", "high", "low", "close", "volume",
+            "close_time", "quote_asset_volume", "number_of_trades",
+            "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
+        ])
+        df["close"] = pd.to_numeric(df["close"])
+        df["volume"] = pd.to_numeric(df["volume"])
+        return df
+    except Exception as e:
+        print(f"Hata (get_binance_data): {e}")
+        return None
 
-def calculate_rsi(closes, period=14):
-    closes = np.array(closes)
-    deltas = np.diff(closes)
-    seed = deltas[:period]
-    up = seed[seed > 0].sum() / period
-    down = -seed[seed < 0].sum() / period
-    rs = up / down if down != 0 else 0
-    rsi = 100. - 100. / (1. + rs)
+def calculate_rsi(df, period=14):
+    delta = df["close"].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
 
-    for delta in deltas[period:]:
-        upval = max(delta, 0)
-        downval = -min(delta, 0)
-        up = (up * (period - 1) + upval) / period
-        down = (down * (period - 1) + downval) / period
-        rs = up / down if down != 0 else 0
-        rsi = 100. - 100. / (1. + rs)
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
 
-    return rsi
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    latest_rsi = rsi.iloc[-1]
 
-def calculate_ema(closes, period=50):
-    return np.mean(closes[-period:])
+    if latest_rsi > 70:
+        return "🔽 Ayı"
+    elif latest_rsi < 30:
+        return "🔼 Boğa"
+    else:
+        return "⏸ Nötr"
 
-def calculate_macd(closes, fast_period=12, slow_period=26, signal_period=9):
-    closes = np.array(closes)
-    ema_fast = np.convolve(closes, np.ones(fast_period)/fast_period, mode='valid')
-    ema_slow = np.convolve(closes, np.ones(slow_period)/slow_period, mode='valid')
-    macd_line = ema_fast[-1] - ema_slow[-1]
-    signal_line = np.mean(ema_fast[-signal_period:])
-    return macd_line, signal_line
+def calculate_macd(df, short=12, long=26, signal=9):
+    short_ema = df["close"].ewm(span=short, adjust=False).mean()
+    long_ema = df["close"].ewm(span=long, adjust=False).mean()
+    macd = short_ema - long_ema
+    signal_line = macd.ewm(span=signal, adjust=False).mean()
 
-def detect_golden_cross(ema50, ema200):
-    return ema50 > ema200
+    if macd.iloc[-1] > signal_line.iloc[-1]:
+        return "🔼 Boğa"
+    elif macd.iloc[-1] < signal_line.iloc[-1]:
+        return "🔽 Ayı"
+    else:
+        return "⏸ Nötr"
 
-def detect_death_cross(ema50, ema200):
-    return ema50 < ema200
+def calculate_ema(df, period=50):
+    ema = df["close"].ewm(span=period, adjust=False).mean()
+    current_price = df["close"].iloc[-1]
+    current_ema = ema.iloc[-1]
 
-def load_coin_list(filename):
-    with open(filename, "r") as f:
-        return [line.strip().upper() for line in f if line.strip()]
+    if current_price > current_ema:
+        return "🔼 Boğa"
+    elif current_price < current_ema:
+        return "🔽 Ayı"
+    else:
+        return "⏸ Nötr"
+
+def load_coin_list(filename="coin_list_updated.txt"):
+    try:
+        with open(filename, "r") as f:
+            return [line.strip().upper() for line in f if line.strip()]
+    except FileNotFoundError:
+        print(f"{filename} bulunamadı.")
+        return []
