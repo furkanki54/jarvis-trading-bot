@@ -1,1 +1,1 @@
-web: python auto_whale_alert.py
+web: python3 auto_whale_alert.py
