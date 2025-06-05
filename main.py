@@ -1,21 +1,50 @@
+import time
+import logging
 from telebot import TeleBot
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 from utils import (
-    load_coin_list,
     get_binance_data,
     calculate_rsi,
     calculate_macd,
     calculate_ema,
+    load_coin_list,
     analyze_indicators,
-    analyze_price_volume,
+    analyze_price_volume
 )
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 
 bot = TeleBot(TELEGRAM_TOKEN)
 coin_list = load_coin_list("coin_list_binance.txt")
 
-@bot.message_handler(commands=["start"])
-def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 Merhaba! Coin ismini yazarak analiz alabilirsin. (örn: BTCUSDT)")
+LAST_MESSAGE_TIME = 0
+
+def safe_send_message(chat_id, text, parse_mode=None):
+    global LAST_MESSAGE_TIME
+    now = time.time()
+    if now - LAST_MESSAGE_TIME >= 1.5:
+        bot.send_message(chat_id, text, parse_mode=parse_mode)
+        LAST_MESSAGE_TIME = now
+
+def analyze_and_signal():
+    for symbol in coin_list:
+        try:
+            df = get_binance_data(symbol)
+            if df is None or df.empty:
+                continue
+
+            rsi = calculate_rsi(df)
+            macd, _ = calculate_macd(df)
+            ema = calculate_ema(df)
+
+            indicator_msg = analyze_indicators(symbol, rsi, macd, ema)
+            price_volume_msg = analyze_price_volume(symbol, df)
+
+            if indicator_msg:
+                safe_send_message(TELEGRAM_CHAT_ID, indicator_msg, parse_mode="Markdown")
+            if price_volume_msg:
+                safe_send_message(TELEGRAM_CHAT_ID, price_volume_msg, parse_mode="Markdown")
+
+        except Exception as e:
+            logging.error(f"Hata {symbol}: {e}")
 
 @bot.message_handler(func=lambda message: True)
 def handle_user_msg(message):
@@ -24,38 +53,33 @@ def handle_user_msg(message):
         symbol += "USDT"
 
     if symbol not in coin_list:
-        bot.send_message(message.chat.id, f"❌ {symbol} analiz listesinde bulunamadı.")
+        safe_send_message(message.chat.id, f"❌ {symbol} analiz listesinde bulunamadı.")
         return
 
-    intervals = ["15m", "1h", "4h"]
-    interval_names = {"15m": "15 Dakika", "1h": "1 Saat", "4h": "4 Saat"}
-    responses = []
-
-    for interval in intervals:
-        df = get_binance_data(symbol, interval)
+    try:
+        df = get_binance_data(symbol)
         if df is None or df.empty:
-            continue
+            safe_send_message(message.chat.id, f"❌ {symbol} için veri alınamadı.")
+            return
 
-        rsi_status = calculate_rsi(df)
-        macd_status = calculate_macd(df)
-        ema_status = calculate_ema(df)
-        boğa_puanı = [rsi_status, macd_status, ema_status].count("📈 Boğa")
+        rsi = calculate_rsi(df)
+        macd, _ = calculate_macd(df)
+        ema = calculate_ema(df)
 
-        genel_yön = "📈 Boğa" if boğa_puanı >= 2 else "📉 Ayı"
+        indicator_msg = analyze_indicators(symbol, rsi, macd, ema)
+        price_volume_msg = analyze_price_volume(symbol, df)
 
-        mesaj = (
-            f"📊 *{symbol} - {interval_names[interval]}*\n"
-            f"RSI: {rsi_status}\n"
-            f"MACD: {macd_status}\n"
-            f"EMA: {ema_status}\n"
-            f"Genel Yön: {genel_yön} (Boğa Puanı: {boğa_puanı}/3)"
-        )
-        responses.append(mesaj)
+        if indicator_msg:
+            safe_send_message(message.chat.id, indicator_msg, parse_mode="Markdown")
+        if price_volume_msg:
+            safe_send_message(message.chat.id, price_volume_msg, parse_mode="Markdown")
+        if not indicator_msg and not price_volume_msg:
+            safe_send_message(message.chat.id, "📉 Sinyale rastlanmadı.")
 
-    if responses:
-        for m in responses:
-            bot.send_message(message.chat.id, m, parse_mode="Markdown")
-    else:
-        bot.send_message(message.chat.id, f"🔍 {symbol} için teknik analiz yapılamadı.")
+    except Exception as e:
+        logging.error(f"Kullanıcı komutu hatası {symbol}: {e}")
+        safe_send_message(message.chat.id, f"⚠️ Hata oluştu: {e}")
 
-bot.polling(non_stop=True)
+if __name__ == "__main__":
+    analyze_and_signal()
+    bot.polling(non_stop=True)
