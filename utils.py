@@ -9,7 +9,7 @@ def load_coin_list(filename):
         return []
 
 def get_binance_data(symbol, interval="1h", limit=100):
-    url = f"https://api.binance.com/api/v3/klines"
+    url = "https://api.binance.com/api/v3/klines"
     params = {"symbol": symbol, "interval": interval, "limit": limit}
     try:
         response = requests.get(url, params=params)
@@ -23,6 +23,7 @@ def get_binance_data(symbol, interval="1h", limit=100):
             df["close"] = df["close"].astype(float)
             df["volume"] = df["volume"].astype(float)
             return df
+        return None
     except:
         return None
 
@@ -36,33 +37,34 @@ def calculate_rsi(df, period=14):
 
     rs = avg_gain / (avg_loss + 1e-10)
     rsi = 100 - (100 / (1 + rs))
-
-    last_rsi = rsi.iloc[-1]
-    if last_rsi > 70:
-        return "📈 Aşırı Alım"
-    elif last_rsi < 30:
-        return "📉 Aşırı Satım"
-    elif last_rsi > 50:
-        return "📈 Boğa"
-    else:
-        return "📉 Ayı"
+    return rsi.iloc[-1]
 
 def calculate_macd(df, short=12, long=26, signal=9):
     short_ema = df["close"].ewm(span=short, adjust=False).mean()
     long_ema = df["close"].ewm(span=long, adjust=False).mean()
     macd_line = short_ema - long_ema
     signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-
-    if macd_line.iloc[-1] > signal_line.iloc[-1]:
-        return "📈 Boğa"
-    else:
-        return "📉 Ayı"
+    return macd_line.iloc[-1], signal_line.iloc[-1]
 
 def calculate_ema(df, short_period=9, long_period=21):
     short_ema = df["close"].ewm(span=short_period, adjust=False).mean()
     long_ema = df["close"].ewm(span=long_period, adjust=False).mean()
+    return short_ema.iloc[-1], long_ema.iloc[-1]
 
-    if short_ema.iloc[-1] > long_ema.iloc[-1]:
-        return "📈 Boğa"
+def analyze_indicators(df):
+    rsi = calculate_rsi(df)
+    macd, signal = calculate_macd(df)
+    ema_short, ema_long = calculate_ema(df)
+
+    rsi_msg = ""
+    if rsi > 70:
+        rsi_msg = "RSI: Aşırı Alım (📈)"
+    elif rsi < 30:
+        rsi_msg = "RSI: Aşırı Satım (📉)"
     else:
-        return "📉 Ayı"
+        rsi_msg = f"RSI: {round(rsi, 2)}"
+
+    macd_msg = "MACD: Boğa (📈)" if macd > signal else "MACD: Ayı (📉)"
+    ema_msg = "EMA: Boğa (📈)" if ema_short > ema_long else "EMA: Ayı (📉)"
+
+    return f"{rsi_msg}\n{macd_msg}\n{ema_msg}"
