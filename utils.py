@@ -1,42 +1,47 @@
 import requests
 import numpy as np
-import pandas as pd
 
-def get_binance_data(symbol, interval="1h", limit=100):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+def get_binance_data(symbol, interval):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit=100"
     response = requests.get(url)
-    if response.status_code == 200:
-        raw_data = response.json()
-        df = pd.DataFrame(raw_data, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "quote_asset_volume", "number_of_trades",
-            "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
-        ])
-        df["close"] = df["close"].astype(float)
-        df["volume"] = df["volume"].astype(float)
-        return df
-    else:
-        return None
+    response.raise_for_status()
+    return response.json()
 
-def calculate_rsi(data, period=14):
-    delta = data["close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
+def calculate_rsi(closes, period=14):
+    closes = np.array(closes)
+    deltas = np.diff(closes)
+    seed = deltas[:period]
+    up = seed[seed > 0].sum() / period
+    down = -seed[seed < 0].sum() / period
+    rs = up / down if down != 0 else 0
+    rsi = 100. - 100. / (1. + rs)
+
+    for delta in deltas[period:]:
+        upval = max(delta, 0)
+        downval = -min(delta, 0)
+        up = (up * (period - 1) + upval) / period
+        down = (down * (period - 1) + downval) / period
+        rs = up / down if down != 0 else 0
+        rsi = 100. - 100. / (1. + rs)
+
     return rsi
 
-def calculate_macd(data):
-    ema12 = data["close"].ewm(span=12, adjust=False).mean()
-    ema26 = data["close"].ewm(span=26, adjust=False).mean()
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
+def calculate_ema(closes, period=50):
+    return np.mean(closes[-period:])
 
-def calculate_ema(data, period=20):
-    return data["close"].ewm(span=period, adjust=False).mean()
+def calculate_macd(closes, fast_period=12, slow_period=26, signal_period=9):
+    closes = np.array(closes)
+    ema_fast = np.convolve(closes, np.ones(fast_period)/fast_period, mode='valid')
+    ema_slow = np.convolve(closes, np.ones(slow_period)/slow_period, mode='valid')
+    macd_line = ema_fast[-1] - ema_slow[-1]
+    signal_line = np.mean(ema_fast[-signal_period:])
+    return macd_line, signal_line
+
+def detect_golden_cross(ema50, ema200):
+    return ema50 > ema200
+
+def detect_death_cross(ema50, ema200):
+    return ema50 < ema200
 
 def load_coin_list(filename):
     with open(filename, "r") as f:
