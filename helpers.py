@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime
 
 def get_technical_indicators(symbol: str, interval: str):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit=100"
@@ -7,14 +8,12 @@ def get_technical_indicators(symbol: str, interval: str):
         return {}
 
     data = response.json()
-
     closes = [float(item[4]) for item in data]
     if len(closes) < 50:
         return {}
 
     price = closes[-1]
 
-    # RSI (14)
     def calculate_rsi(data, period=14):
         gains = []
         losses = []
@@ -33,7 +32,6 @@ def get_technical_indicators(symbol: str, interval: str):
 
     rsi = calculate_rsi(closes)
 
-    # EMA
     def ema(data, period):
         k = 2 / (period + 1)
         ema_val = sum(data[-period:]) / period
@@ -45,7 +43,6 @@ def get_technical_indicators(symbol: str, interval: str):
     ema100 = ema(closes, 100)
     ema200 = ema(closes, 200) if len(closes) >= 200 else None
 
-    # MACD
     def macd_calc(data):
         ema12 = ema(data, 12)
         ema26 = ema(data, 26)
@@ -75,6 +72,7 @@ def analyze_coin(coin_symbol):
 
     scores = {}
     details = {}
+    current_price = None
 
     for label, tf in timeframes.items():
         indicators = get_technical_indicators(coin_symbol, tf)
@@ -84,7 +82,7 @@ def analyze_coin(coin_symbol):
         ema50 = indicators.get("ema50")
         ema100 = indicators.get("ema100")
         ema200 = indicators.get("ema200")
-        current_price = indicators.get("price")
+        current_price = indicators.get("price")  # Tüm zaman dilimlerinde aynı
 
         score = 0
         comment = []
@@ -128,24 +126,26 @@ def analyze_coin(coin_symbol):
         scores[label] = score
         details[label] = comment
 
-    # Ortalama puan
     avg_score = sum(scores.values()) / len(scores)
 
-    if avg_score >= 4:
-        genel_sinyal = "🚀 Güçlü Boğa"
+    if avg_score >= 9:
+        genel_sinyal = "🚀 Süper Boğa"
+    elif avg_score >= 7:
+        genel_sinyal = "📈 Güçlü Boğa"
+    elif avg_score >= 5:
+        genel_sinyal = "📊 Nötr / Hafif Boğa"
     elif avg_score >= 3:
-        genel_sinyal = "📈 Boğa"
-    elif avg_score >= 2:
-        genel_sinyal = "⚖️ Nötr"
-    elif avg_score >= 1:
-        genel_sinyal = "📉 Ayı"
+        genel_sinyal = "⚠️ Ayı"
     else:
         genel_sinyal = "🐻 Güçlü Ayı"
 
-    # Mesaj oluştur
-    msg = f"📊 {coin_symbol.upper()} Çoklu Zaman Dilimi Teknik Analizi:\n\n"
+    # Mesaj formatı
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    msg = f"📊 {coin_symbol.upper()} Teknik Analiz – {now}\n"
+    msg += f"💰 Güncel Fiyat: ${current_price:.2f}\n\n"
+
     for tf_label, score in scores.items():
-        tf_sinyal = "Boğa" if score >= 3 else "Ayı" if score <= 2 else "Nötr"
+        tf_sinyal = "Boğa" if score >= 6 else "Ayı" if score <= 4 else "Nötr"
         msg += f"⏱ {tf_label} → {tf_sinyal} ({score}/10)\n"
         for item in details[tf_label]:
             msg += f"    • {item}\n"
