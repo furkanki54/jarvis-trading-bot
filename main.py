@@ -1,71 +1,94 @@
-import requests
 import time
+import requests
+import pandas as pd
 from telebot import TeleBot
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, BINANCE_API_BASE, COIN_LIST_FILE
 from utils import get_binance_data, calculate_rsi, calculate_macd, calculate_ema, load_coin_list
 
 bot = TeleBot(TELEGRAM_TOKEN)
-coin_list = load_coin_list("coin_list_updated.txt")
-VOLUME_THRESHOLD = 50  # Hacim değişimi eşiği (%)
-PRICE_THRESHOLD = 3    # Fiyat değişimi eşiği (%)
+coin_list = load_coin_list(COIN_LIST_FILE)
 
-def analyze_coin(symbol):
-    try:
-        df = get_binance_data(symbol)
-        if df is None or df.empty:
-            return None
+VOLUME_THRESHOLD = 50  # % olarak
+PRICE_THRESHOLD = 3  # % olarak
 
-        volume_change = ((df['volume'].iloc[-1] - df['volume'].iloc[-2]) / df['volume'].iloc[-2]) * 100
-        price_change = ((df['close'].iloc[-1] - df['close'].iloc[-2]) / df['close'].iloc[-2]) * 100
+def check_coin(symbol):
+    df = get_binance_data(symbol)
+    if df is None or len(df) < 2:
+        return None
 
-        rsi_value = calculate_rsi(df)
-        ema_value = calculate_ema(df)
-        macd_value = calculate_macd(df)
+    latest = df.iloc[-1]
+    previous = df.iloc[-2]
 
-        rsi_status = "🔼 Boğa" if rsi_value > 50 else "🔽 Ayı"
-        ema_status = "🔼 Boğa" if df['close'].iloc[-1] > ema_value else "🔽 Ayı"
-        macd_status = "🔼 Boğa" if macd_value > 0 else "🔽 Ayı"
+    price_change = ((latest["close"] - previous["close"]) / previous["close"]) * 100
+    volume_change = ((latest["volume"] - previous["volume"]) / previous["volume"]) * 100
 
-        boğa_puanı = sum([
-            1 if rsi_status == "🔼 Boğa" else 0,
-            1 if ema_status == "🔼 Boğa" else 0,
-            1 if macd_status == "🔼 Boğa" else 0
-        ])
-        genel_yon = "Boğa" if boğa_puanı >= 2 else "Ayı"
+    signal = ""
+    if price_change > PRICE_THRESHOLD and volume_change > VOLUME_THRESHOLD:
+        signal = "📈 Fiyat ve hacimde yükseliş!"
+    elif price_change < -PRICE_THRESHOLD and volume_change > VOLUME_THRESHOLD:
+        signal = "📉 Fiyat düşüyor ama hacim artıyor!"
+    elif volume_change > VOLUME_THRESHOLD:
+        signal = "🐋 Yüksek hacim artışı tespit edildi!"
 
-        mesaj = f"""📉 BALİNA SİNYALİ!
-🌕 Coin: {symbol.upper()}
-💲 Fiyat Değişimi: %{price_change:.2f}
-📊 Hacim Değişimi: %{volume_change:.2f}
-{rsi_status} | {ema_status} | {macd_status}
-🚀 Genel Yön: {genel_yon} (Boğa Puanı: {boğa_puanı}/3)"""
+    if signal:
+        rsi = calculate_rsi(df).iloc[-1]
+        macd, signal_line = calculate_macd(df)
+        macd_val = macd.iloc[-1]
+        signal_val = signal_line.iloc[-1]
+        ema = calculate_ema(df).iloc[-1]
+        trend = "📊 Trend: Yukarı" if latest["close"] > ema else "📊 Trend: Aşağı"
 
-        return mesaj if volume_change > VOLUME_THRESHOLD and abs(price_change) > PRICE_THRESHOLD else None
-    except Exception as e:
-        return f"⚠️ Hata oluştu: {e}"
-
-def hourly_scan():
-    sinyal_var_mi = False
-    for coin in coin_list:
-        symbol = f"{coin.upper()}"
-        sinyal = analyze_coin(symbol)
-        if sinyal:
-            bot.send_message(TELEGRAM_CHAT_ID, sinyal)
-            sinyal_var_mi = True
-    if not sinyal_var_mi:
-        bot.send_message(TELEGRAM_CHAT_ID, "📡 Saatlik tarama tamamlandı, sinyale rastlanmadı.")
+        return f"🚨 Sinyal: {symbol}\n{signal}\n\nRSI: {rsi:.2f}\nMACD: {macd_val:.4f}\nEMA: {ema:.2f}\n{trend}"
+    return None
 
 @bot.message_handler(func=lambda message: True)
-def handle_user_msg(message):
+def handle_message(message):
     symbol = message.text.strip().upper()
-    sinyal = analyze_coin(symbol)
-    if sinyal:
-        bot.send_message(message.chat.id, sinyal)
-    else:
-        bot.send_message(message.chat.id, "📡 Teknik analiz tamamlandı, sinyal yok.")
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
 
-def start_polling():
-    bot.polling(non_stop=True)
+    if symbol in coin_list:
+        df = get_binance_data(symbol)
+        if df is None:
+            bot.reply_to(message, "Veri alınamadı.")
+            return
+
+        rsi = calculate_rsi(df).iloc[-1]
+        macd, signal_line = calculate_macd(df)
+        macd_val = macd.iloc[-1]
+        signal_val = signal_line.iloc[-1]
+        ema = calculate_ema(df).iloc[-1]
+        latest_price = df.iloc[-1]["close"]
+        trend = "Yukarı" if latest_price > ema else "Aşağı"
+
+        score = 0
+        if rsi < 30:
+            score += 1
+        elif rsi > 70:
+            score -= 1
+        if macd_val > signal_val:
+            score += 1
+        else:
+            score -= 1
+        if latest_price > ema:
+            score += 1
+        else:
+            score -= 1
+
+        bot.reply_to(message, f"📊 Teknik analiz: {symbol}\nRSI: {rsi:.2f}\nMACD: {macd_val:.4f}\nEMA: {ema:.2f}\nTrend: {trend}\nBoğa/Ayı Puanı: {score}/3")
+    else:
+        bot.reply_to(message, "Coin listede bulunamadı veya sembol hatalı.")
+
+def run_loop():
+    while True:
+        for symbol in coin_list:
+            try:
+                message = check_coin(symbol)
+                if message:
+                    bot.send_message(TELEGRAM_CHAT_ID, message)
+            except Exception as e:
+                print(f"Hata oluştu: {symbol} - {str(e)}")
+        time.sleep(60)
 
 if __name__ == "__main__":
-    start_polling()
+    run_loop()
