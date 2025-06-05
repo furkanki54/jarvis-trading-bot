@@ -1,7 +1,6 @@
 import requests
 import time
 import telebot
-
 from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -21,6 +20,7 @@ def get_5m_kline(symbol):
     return res.json()
 
 def analyze_coin(symbol):
+    print(f"🕵️ Tarama: {symbol}")
     klines = get_5m_kline(symbol)
     if len(klines) < 6:
         return None
@@ -56,9 +56,11 @@ Hacim Artışı: %{info['volume_change']}
 
 Bu ani yükseliş büyük alım sinyali olabilir.
 """
+    print(f"📨 Sinyal gönderildi: {info['symbol']}")
     bot.send_message(TELEGRAM_CHAT_ID, msg)
 
 def main_loop():
+    print("🔁 Balina tarayıcı başlatıldı...")
     already_alerted = set()
     while True:
         try:
@@ -68,10 +70,9 @@ def main_loop():
                 if result and result['symbol'] not in already_alerted:
                     send_alert(result)
                     already_alerted.add(result['symbol'])
-
-            time.sleep(300)  # 5 dakika bekle
+            time.sleep(300)  # 5 dakika
         except Exception as e:
-            print("Hata:", e)
+            print(f"🔥 HATA: {e}")
             time.sleep(60)
 
 if __name__ == "__main__":
