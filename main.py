@@ -55,7 +55,7 @@ def analyze_coin(symbol):
     ema_status = "🔼 Boğa" if last["close"] > last["ema20"] else "🔽 Ayı"
     macd_status = "🔼 Boğa" if last["macd"] > 0 else "🔽 Ayı"
 
-    boğa_puanı = sum([rsi_status, ema_status, macd_status].count("🔼 Boğa"))
+    boğa_puanı = [rsi_status, ema_status, macd_status].count("🔼 Boğa")
     yön = "🚀 Genel Yön: Boğa" if boğa_puanı >= 2 else "🐻 Genel Yön: Ayı"
 
     fiyat_degisim = ((last["close"] - prev["close"]) / prev["close"]) * 100
