@@ -6,10 +6,10 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43kRjaKmfGc"
+TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43k3RjaKmfGc"
 CHAT_ID = "-1002549376225"
 
-coin_list = [  # 200+ coin listesi burada gömülü
+coin_list = [  # 200+ coin gömülü liste
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
     "BATUSDT", "VETUSDT", "NEOUSDT", "QTUMUSDT", "IOSTUSDT", "THETAUSDT", "ALGOUSDT", "ZILUSDT", "KNCUSDT",
@@ -33,8 +33,7 @@ coin_list = [  # 200+ coin listesi burada gömülü
     "TWTUSDT", "TOKENUSDT", "STEEMUSDT", "ILVUSDT", "NTRNUSDT", "KASUSDT", "BEAMXUSDT", "1000BONKUSDT",
     "PYTHUSDT", "SUPERUSDT", "ONGUSDT", "ETHWUSDT", "JTOUSDT", "1000SATSUSDT", "AUCTIONUSDT", "1000RATSUSDT",
     "ACEUSDT", "MOVRUSDT", "NFPUSDT", "AIUSDT", "XAIUSDT", "WIFUSDT", "MANTAUSDT", "ONDOUSDT", "POPCATUSDT",
-    "BOMEUSDT",
-    # ... devamı var (önceki kayıtlara göre tamamı sisteme kayıtlı)
+    "BOMEUSDT"
 ]
 
 def get_price(coin):
@@ -70,8 +69,8 @@ def calculate_ema(prices, period):
 def calculate_bollinger(prices):
     ma = np.mean(prices)
     std = np.std(prices)
-    upper = ma + 2*std
-    lower = ma - 2*std
+    upper = ma + 2 * std
+    lower = ma - 2 * std
     last = prices[-1]
     if last < lower:
         return "Alt Bant (Aşırı Satım)"
@@ -110,7 +109,7 @@ async def handle_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     intervals = ["1m", "15m", "1h", "4h", "1d"]
     rsi_scores, macd_scores, ema_scores = [], [], []
     yorum = ""
-    
+
     for interval in intervals:
         prices, _ = get_klines(symbol, interval)
         rsi = calculate_rsi(prices)
@@ -122,8 +121,8 @@ async def handle_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     boll = calculate_bollinger(prices)
     fibo = get_fibonacci_levels(prices)
-
     avg_score = round(np.mean(rsi_scores + macd_scores + ema_scores), 2)
+
     if avg_score >= 7:
         yorum = "📈 Güçlü Boğa Sinyali"
     elif avg_score >= 4:
@@ -131,7 +130,6 @@ async def handle_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         yorum = "📉 Short Riski"
 
-    # Yapay zekâ tahmini
     st_pred, mt_pred = ai_prediction(rsi_scores, macd_scores, ema_scores)
 
     msg = f"""📊 Bileşik Teknik Analiz: {symbol}
