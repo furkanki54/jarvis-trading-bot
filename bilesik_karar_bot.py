@@ -6,7 +6,6 @@ from telebot import TeleBot
 TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43k3RjaKmfGc"
 bot = TeleBot(TOKEN)
 
-# 🔒 SADECE SEÇİLMİŞ COINLERLE ÇALIŞ
 coin_list = [
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
@@ -34,40 +33,61 @@ coin_list = [
     "BOMEUSDT"
 ]
 
-# ✅ DÜZELTİLMİŞ MACD HESABI
+def get_klines(symbol, interval="1h", limit=100):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    data = requests.get(url).json()
+    return [float(entry[4]) for entry in data]
+
 def calculate_macd(prices):
-    try:
-        prices = np.array(prices)
-        ema12 = pd.Series(prices).ewm(span=12, adjust=False).mean()
-        ema26 = pd.Series(prices).ewm(span=26, adjust=False).mean()
-        macd_line = ema12 - ema26
-        signal_line = macd_line.ewm(span=9, adjust=False).mean()
-        macd_hist = macd_line - signal_line
+    prices = np.array(prices)
+    ema12 = pd.Series(prices).ewm(span=12, adjust=False).mean()
+    ema26 = pd.Series(prices).ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    macd_hist = macd_line - signal_line
+    scores = []
+    for value in macd_hist[-5:]:
+        if value > 0.0001:
+            scores.append(2)
+        elif value < -0.0001:
+            scores.append(0)
+        else:
+            scores.append(1)
+    return scores
 
-        scores = []
-        for value in macd_hist[-5:]:
-            if value > 0.0001:
-                scores.append(2)
-            elif value < -0.0001:
-                scores.append(0)
-            else:
-                scores.append(1)
-        return scores
-    except Exception as e:
-        print(f"MACD hesaplama hatası: {e}")
-        return [0, 0, 0, 0, 0]
-
-# 🔁 BOT KOMUTLARI (ESKİDEN AYNI KALSIN)
 @bot.message_handler(func=lambda message: "analiz" in message.text.lower())
-def analyze_message(message):
-    symbol = message.text.split()[0].upper()
-    
-    if symbol not in coin_list:
-        bot.send_message(message.chat.id, f"⚠️ {symbol} analiz listesinde değil.")
-        return
+def analyze(message):
+    try:
+        symbol = message.text.split()[0].upper()
+        if symbol not in coin_list:
+            bot.send_message(message.chat.id, f"⚠️ {symbol} analiz listesinde değil.")
+            return
 
-    # Eski analiz yapısı korunacak: RSI, EMA, MACD + AI karar sistemi
-    # Kodun geri kalanı senin eski dosyandaki gibi devam eder...
-    ...
-    
+        prices = get_klines(symbol)
+        rsi = round(np.mean(prices[-14:]), 2)
+        ema20 = round(pd.Series(prices).ewm(span=20).mean().iloc[-1], 2)
+        ema50 = round(pd.Series(prices).ewm(span=50).mean().iloc[-1], 2)
+        macd_scores = calculate_macd(prices)
+        price = prices[-1]
+
+        total_score = round((rsi / 100 * 3) + (sum(macd_scores) / 10) + (1 if price > ema20 and price > ema50 else 0), 2)
+
+        yorum = "📈 Boğa Gücü" if total_score > 7 else "⚠️ Nötr" if total_score > 4 else "📉 Ayı Baskısı"
+
+        bot.send_message(message.chat.id, f'''
+📊 Teknik Analiz: {symbol}
+Fiyat: {price} USDT
+
+🔹 RSI: {rsi}
+🔹 EMA20: {ema20}
+🔹 EMA50: {ema50}
+🔹 MACD Puanları: {macd_scores}
+
+🎯 Ortalama Puan: {total_score}/10
+💬 Yorum: {yorum}
+        ''')
+    except Exception as e:
+        bot.send_message(message.chat.id, f"Hata: {e}")
+
+print("Bileşik Karar Botu çalışıyor...")
 bot.polling()
