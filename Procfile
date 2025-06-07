@@ -1,1 +1,0 @@
-python3 bilesik_karar_bot_v2.py
