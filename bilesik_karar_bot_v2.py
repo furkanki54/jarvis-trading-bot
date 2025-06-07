@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 TELEGRAM_TOKEN = "8078903959:AAF37zwfzT1lJXqgob_3bCxEeiDgbRSow3w"
 
@@ -66,7 +67,6 @@ def analyze(symbol="BTCUSDT"):
     else:
         decision = "RSI kararsız. Fiyat izlenmeli."
 
-    # Destek-Direnç mantığı
     price_context = ""
     support = fibo_levels["0.5"]
     resistance = fibo_levels["0.236"]
@@ -87,21 +87,19 @@ def analyze(symbol="BTCUSDT"):
 
     return text
 
-def handle_message(update, context):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.upper()
     if "ANALİZ" in text:
         coin = text.replace("ANALİZ", "").strip().upper()
         if not coin.endswith("USDT"):
             coin += "USDT"
         result = analyze(coin)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=result)
+        await update.message.reply_text(result)
 
 def main():
-    updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
-    dp = updater.dispatcher
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    updater.start_polling()
-    updater.idle()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
