@@ -55,11 +55,24 @@ def calculate_rsi(prices):
     return rsi
 
 def calculate_macd(prices):
-    ema12 = np.mean(prices[-12:])
-    ema26 = np.mean(prices[-26:])
-    macd = ema12 - ema26
-    signal = np.mean(prices[-9:])
-    return macd - signal
+    prices = np.array(prices)
+
+    ema12 = pd.Series(prices).ewm(span=12, adjust=False).mean()
+    ema26 = pd.Series(prices).ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    histogram = macd_line - signal_line
+
+    # Son 5 histogram değerinden MACD puanı üret
+    scores = []
+    for value in histogram[-5:]:
+        if value > 0.0001:
+            scores.append(2)
+        elif value < -0.0001:
+            scores.append(0)
+        else:
+            scores.append(1)
+    return scores
 
 def calculate_ema(prices, period):
     weights = np.exp(np.linspace(-1., 0., period))
