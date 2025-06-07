@@ -41,6 +41,10 @@ def calculate_fibonacci(prices):
     }
     return levels
 
+def load_coin_list():
+    with open("coin_list.txt", "r") as f:
+        return [line.strip().upper() for line in f.readlines()]
+
 def analyze(symbol="BTCUSDT"):
     timeframes = {"15m": "15 Dakika", "1h": "1 Saat", "4h": "4 Saat", "1d": "1 Gün"}
     rsi_data = {}
@@ -87,12 +91,17 @@ def analyze(symbol="BTCUSDT"):
 
     return text
 
+coin_list = load_coin_list()
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.upper()
     if "ANALİZ" in text:
         coin = text.replace("ANALİZ", "").strip().upper()
         if not coin.endswith("USDT"):
             coin += "USDT"
+        if coin not in coin_list:
+            await update.message.reply_text(f"❌ {coin} analiz listesinde yok.")
+            return
         result = analyze(coin)
         await update.message.reply_text(result)
 
