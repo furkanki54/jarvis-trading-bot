@@ -1,5 +1,4 @@
-python-telegram-bot==20.8
-python-binance==1.0.19
+pyTelegramBotAPI==4.14.1
 pandas
 numpy
-ta
+requests
