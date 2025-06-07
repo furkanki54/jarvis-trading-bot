@@ -1,59 +1,62 @@
 # ai_predictor.py
 
-import random
-
-def predict_price_movement(rsi_values, macd_values, ema_values, volume_changes, price_changes):
+def predict_price_movement(df, timeframe_label="1 Saat"):
     """
-    Basit yapay zeka simülasyonu: RSI, MACD, EMA, hacim ve fiyat verilerine göre
-    olasılık tahmini yapar.
+    df: pandas DataFrame (fiyat verisi)
+    timeframe_label: zaman dilimi etiketi (örnek: "1 Saat", "4 Saat")
+
+    Çıktı: detaylı tahmin metni (str)
     """
 
-    # Ağırlıklı skor hesaplama (her indikatöre puan atıyoruz)
-    score = 0
+    if df is None or df.empty:
+        return f"❗ {timeframe_label} verisi bulunamadı."
 
-    # RSI değerlendirmesi
-    for rsi in rsi_values:
-        if rsi < 30:
-            score += 1.5  # Aşırı satım → pozitif
-        elif rsi > 70:
-            score -= 1.5  # Aşırı alım → negatif
-        else:
-            score += 0.5  # Nötr
+    close = df['close']
+    if len(close) < 10:
+        return f"❗ {timeframe_label} için yeterli veri yok."
 
-    # MACD değerlendirmesi
-    for macd in macd_values:
-        if macd > 0:
-            score += 1
-        else:
-            score -= 1
+    # RSI
+    rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
+    rsi_score = 1.5 if rsi < 30 else (-1.5 if rsi > 70 else 0)
 
-    # EMA değerlendirmesi
-    for ema in ema_values:
-        if ema > 0:
-            score += 1
-        else:
-            score -= 1
+    # MACD
+    macd_diff = ta.trend.MACD(close).macd_diff()
+    macd_delta = macd_diff.iloc[-1] - macd_diff.iloc[-2]
+    macd_score = 1 if macd_diff.iloc[-1] > 0 else -1
+    macd_slope_score = 1 if macd_delta > 0 else -1
 
-    # Hacim ve fiyat momentum
-    if volume_changes[-1] > 0 and price_changes[-1] > 0:
-        score += 1.5  # Momentum artışı
+    # EMA
+    ema_fast = ta.trend.EMAIndicator(close, window=9).ema_indicator().iloc[-1]
+    ema_slow = ta.trend.EMAIndicator(close, window=21).ema_indicator().iloc[-1]
+    ema_score = 1 if ema_fast > ema_slow else -1
 
-    # Normalize edip tahmin üret
-    confidence = min(100, max(0, int(50 + score * 5)))
-    direction = "YÜKSELİŞ" if score > 1 else "DÜŞÜŞ" if score < -1 else "YATAY"
+    # Hacim (varsa)
+    try:
+        vol = df['volume']
+        vol_change = (vol.iloc[-1] - vol.iloc[-2]) / vol.iloc[-2] * 100
+        vol_score = 1 if vol_change > 0 else -1
+    except:
+        vol_score = 0
 
-    comment = f"""
-🧠 AI Tahmini:
-📊 Yön: {direction}
-📈 Güven: %{confidence}
+    # Toplam skor
+    total_score = rsi_score + macd_score + macd_slope_score + ema_score + vol_score
 
-💡 Strateji:
-"""
+    # Yorumlama
+    direction = "YÜKSELİŞ" if total_score >= 2 else "DÜŞÜŞ" if total_score <= -2 else "YATAY"
+    confidence = min(100, max(50, int(60 + total_score * 5)))
+
+    # Strateji
     if direction == "YÜKSELİŞ":
-        comment += "Kısa vadeli long fırsatları değerlendirilebilir."
+        strategy = f"📈 {timeframe_label} için long fırsatı olabilir."
     elif direction == "DÜŞÜŞ":
-        comment += "Short riski artıyor, dikkatli olunmalı."
+        strategy = f"📉 {timeframe_label} için short riski artıyor."
     else:
-        comment += "Net sinyal yok, yön belirginleşene kadar beklenmeli."
+        strategy = f"⚖️ {timeframe_label} için net sinyal yok."
 
-    return comment.strip()
+    # Final mesaj
+    return f"""
+🧠 AI Tahmini ({timeframe_label}):
+🔹 Yön: {direction}
+🔹 Güven: %{confidence}
+{strategy}
+""".strip()
