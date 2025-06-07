@@ -8,7 +8,6 @@ from support_resistance import detect_support_resistance
 import pandas as pd
 import numpy as np
 from config import TELEGRAM_TOKEN
-import os
 
 client = Client()
 
@@ -107,8 +106,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().upper()
     if text.endswith("ANALIZ"):
         coin_symbol = text.replace("ANALIZ", "").strip()
-        if coin_symbol in load_coin_list():
-            msg = analyze_coin(f"{coin_symbol}USDT")
+        full_symbol = f"{coin_symbol}USDT"
+        if full_symbol in load_coin_list():
+            msg = analyze_coin(full_symbol)
             await update.message.reply_text(msg)
         else:
             await update.message.reply_text(f"❌ '{coin_symbol}' listede bulunamadı.")
