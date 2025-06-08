@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import numpy as np
 
-TOKEN = "YENİ_TOKENIN_BURAYA"  # Buraya yeni tokenı gir
+TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43k3RjaKmfGc"
 bot = telebot.TeleBot(TOKEN)
 
 coin_list = [
