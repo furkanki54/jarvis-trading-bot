@@ -6,7 +6,7 @@ from telebot import TeleBot
 TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43k3RjaKmfGc"
 bot = TeleBot(TOKEN)
 
-coin_list = [  # SENİN TAM LİSTEN
+coin_list = [  # SENİN TAM COİN LİSTEN
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
     "BATUSDT", "VETUSDT", "NEOUSDT", "QTUMUSDT", "IOSTUSDT", "THETAUSDT", "ALGOUSDT", "ZILUSDT", "KNCUSDT",
@@ -38,22 +38,36 @@ def get_klines(symbol, interval="1h", limit=100):
     data = requests.get(url).json()
     return [float(entry[4]) for entry in data]
 
+def calculate_rsi(prices, period=14):
+    deltas = np.diff(prices)
+    gains = np.where(deltas > 0, deltas, 0)
+    losses = np.where(deltas < 0, -deltas, 0)
+    avg_gain = pd.Series(gains).rolling(window=period).mean()
+    avg_loss = pd.Series(losses).rolling(window=period).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return round(rsi.iloc[-1], 2) if not rsi.isna().all() else 50
+
 def calculate_macd(prices):
-    prices = np.array(prices)
-    ema12 = pd.Series(prices).ewm(span=12, adjust=False).mean()
-    ema26 = pd.Series(prices).ewm(span=26, adjust=False).mean()
-    macd_line = ema12 - ema26
-    signal_line = macd_line.ewm(span=9, adjust=False).mean()
-    macd_hist = macd_line - signal_line
-    scores = []
-    for value in macd_hist[-5:]:
-        if value > 0.0001:
-            scores.append(2)
-        elif value < -0.0001:
-            scores.append(0)
-        else:
-            scores.append(1)
-    return scores
+    try:
+        prices = pd.Series(prices)
+        ema12 = prices.ewm(span=12, adjust=False).mean()
+        ema26 = prices.ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        signal_line = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - signal_line
+        scores = []
+        for h in macd_hist[-5:]:
+            if h > 0.0001:
+                scores.append(2)
+            elif h < -0.0001:
+                scores.append(0)
+            else:
+                scores.append(1)
+        return scores
+    except Exception as e:
+        print("MACD hatası:", e)
+        return [0, 0, 0, 0, 0]
 
 @bot.message_handler(func=lambda message: "analiz" in message.text.lower())
 def analyze(message):
@@ -64,7 +78,7 @@ def analyze(message):
             return
 
         prices = get_klines(symbol)
-        rsi = round(np.mean(prices[-14:]), 2)
+        rsi = calculate_rsi(prices)
         ema20 = round(pd.Series(prices).ewm(span=20).mean().iloc[-1], 2)
         ema50 = round(pd.Series(prices).ewm(span=50).mean().iloc[-1], 2)
         macd_scores = calculate_macd(prices)
