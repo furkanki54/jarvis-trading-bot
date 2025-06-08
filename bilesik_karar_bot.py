@@ -1,58 +1,90 @@
+import telebot
 import requests
 import pandas as pd
-import numpy as np
-import telebot
 
+# Telegram bot token
 TOKEN = "8078903959:AAF37zwfzT1lJXqgob_3bCxEeiDgbRSow3w"
 bot = telebot.TeleBot(TOKEN)
 
+# Coin listesi (200+ coin sabit)
 coin_list = [
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
     "BATUSDT", "VETUSDT", "NEOUSDT", "QTUMUSDT", "IOSTUSDT", "THETAUSDT", "ALGOUSDT", "ZILUSDT", "KNCUSDT",
     "ZRXUSDT", "COMPUSDT", "DOGEUSDT", "SXPUSDT", "KAVAUSDT", "BANDUSDT", "RLCUSDT", "MKRUSDT", "SNXUSDT",
     "DOTUSDT", "DEFIUSDT", "YFIUSDT", "CRVUSDT", "TRBUSDT", "RUNEUSDT", "SUSHIUSDT", "EGLDUSDT", "SOLUSDT",
-    "UNIUSDT", "AVAXUSDT", "AAVEUSDT", "NEARUSDT", "FILUSDT", "LRCUSDT", "AXSUSDT", "ZENUSDT", "GRTUSDT",
-    "CHZUSDT", "SANDUSDT", "MANAUSDT", "HBARUSDT", "ONEUSDT", "HOTUSDT", "GALAUSDT", "ARUSDT", "LDOUSDT",
-    "ICPUSDT", "APTUSDT", "QNTUSDT", "FETUSDT", "INJUSDT", "GMXUSDT", "CFXUSDT", "STXUSDT", "SSVUSDT",
-    "XAIUSDT", "WIFUSDT", "ONDOUSDT", "TIAUSDT", "CAKEUSDT", "TWTUSDT", "SEIUSDT", "CYBERUSDT", "ARKUSDT",
-    "KASUSDT", "1000FLOKIUSDT", "PYTHUSDT", "WAXPUSDT", "BSVUSDT", "1000SATSUSDT", "JTOUSDT", "ACEUSDT",
-    "MOVRUSDT", "NFPUSDT", "AIUSDT", "PEOPLEUSDT", "IDUSDT", "JOEUSDT", "LEVERUSDT", "RDNTUSDT", "HFTUSDT",
-    "XVSUSDT", "BLURUSDT", "EDUUSDT", "SUIUSDT", "UMAUSDT", "NMRUSDT", "MAVUSDT", "XVGUSDT", "WLDUSDT",
-    "PENDLEUSDT", "ARKMUSDT", "AGLDUSDT", "YGGUSDT", "DODOXUSDT", "BNTUSDT", "OXTUSDT", "HIFIUSDT",
-    "BICOUSDT", "BIGTIMEUSDT", "STEEMUSDT", "ILVUSDT", "NTRNUSDT", "BEAMXUSDT", "1000BONKUSDT", "TOKENUSDT",
-    "POWRUSDT", "GASUSDT", "RIFUSDT", "POLYXUSDT", "TLMUSDT", "ARBUSDT", "SUPERUSDT", "ONGUSDT", "ETHWUSDT",
-    "1000RATSUSDT", "MEMEUSDT", "PHBUSDT", "ASTRUSDT", "HIGHUSDT", "MINAUSDT", "MAGICUSDT", "HOOKUSDT",
-    "FXSUSDT", "LQTYUSDT", "TRUUSDT", "PERPUSDT", "CKBUSDT", "ACHUSDT", "STGUSDT", "SPELLUSDT", "AUCTIONUSDT"
+    "ICXUSDT", "STORJUSDT", "UNIUSDT", "AVAXUSDT", "ENJUSDT", "FLMUSDT", "KSMUSDT", "NEARUSDT", "AAVEUSDT",
+    "FILUSDT", "RSRUSDT", "LRCUSDT", "BELUSDT", "AXSUSDT", "ALPHAUSDT", "ZENUSDT", "SKLUSDT", "GRTUSDT",
+    "1INCHUSDT", "CHZUSDT", "SANDUSDT", "ANKRUSDT", "RVNUSDT", "SFPUSDT", "COTIUSDT", "CHRUSDT", "MANAUSDT",
+    "ALICEUSDT", "HBARUSDT", "ONEUSDT", "DENTUSDT", "CELRUSDT", "HOTUSDT", "MTLUSDT", "OGNUSDT", "NKNUSDT",
+    "1000SHIBUSDT", "BAKEUSDT", "GTCUSDT", "BTCDOMUSDT", "IOTXUSDT", "C98USDT", "MASKUSDT", "ATAUSDT",
+    "DYDXUSDT", "1000XECUSDT", "GALAUSDT", "CELOUSDT", "ARUSDT", "ARPAUSDT", "CTSIUSDT", "LPTUSDT",
+    "ENSUSDT", "PEOPLEUSDT", "ROSEUSDT", "DUSKUSDT", "FLOWUSDT", "IMXUSDT", "API3USDT", "GMTUSDT",
+    "APEUSDT", "WOOUSDT", "JASMYUSDT", "OPUSDT", "INJUSDT", "STGUSDT", "SPELLUSDT", "1000LUNCUSDT",
+    "LUNA2USDT", "LDOUSDT", "ICPUSDT", "APTUSDT", "QNTUSDT", "FETUSDT", "FXSUSDT", "HOOKUSDT", "MAGICUSDT",
+    "TUSDT", "HIGHUSDT", "MINAUSDT", "ASTRUSDT", "PHBUSDT", "GMXUSDT", "CFXUSDT", "STXUSDT", "ACHUSDT",
+    "SSVUSDT", "CKBUSDT", "PERPUSDT", "TRUUSDT", "LQTYUSDT", "IDUSDT", "ARBUSDT", "JOEUSDT", "TLMUSDT",
+    "LEVERUSDT", "RDNTUSDT", "HFTUSDT", "XVSUSDT", "ETHBTC", "BLURUSDT", "EDUUSDT", "SUIUSDT", "1000FLOKIUSDT",
+    "UMAUSDT", "NMRUSDT", "MAVUSDT", "XVGUSDT", "WLDUSDT", "PENDLEUSDT", "ARKMUSDT", "AGLDUSDT", "YGGUSDT",
+    "DODOXUSDT", "BNTUSDT", "OXTUSDT", "SEIUSDT", "CYBERUSDT", "HIFIUSDT", "ARKUSDT", "BICOUSDT", "BIGTIMEUSDT",
+    "WAXPUSDT", "BSVUSDT", "RIFUSDT", "POLYXUSDT", "GASUSDT", "POWRUSDT", "TIAUSDT", "CAKEUSDT", "MEMEUSDT",
+    "TWTUSDT", "TOKENUSDT", "STEEMUSDT", "ILVUSDT", "NTRNUSDT", "KASUSDT", "BEAMXUSDT", "1000BONKUSDT",
+    "PYTHUSDT", "SUPERUSDT", "ONGUSDT", "ETHWUSDT", "JTOUSDT", "1000SATSUSDT", "AUCTIONUSDT", "1000RATSUSDT",
+    "ACEUSDT", "MOVRUSDT", "NFPUSDT", "AIUSDT", "XAIUSDT", "WIFUSDT", "MANTAUSDT", "ONDOUSDT", "POPCATUSDT",
+    "BOMEUSDT"
 ]
 
-def get_klines(symbol, interval="1h", limit=500):
+def get_klines(symbol, interval, limit=1000):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
     response = requests.get(url)
     data = response.json()
-    return [float(entry[4]) for entry in data]
+    closes = [float(entry[4]) for entry in data]
+    return closes
 
-def get_rsi(closes):
-    delta = pd.Series(closes).diff()
-    gain = delta.clip(lower=0).rolling(window=14).mean()
-    loss = -delta.clip(upper=0).rolling(window=14).mean()
-    rs = gain / loss
+def get_rsi_score(closes):
+    prices = pd.Series(closes)
+    delta = prices.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=14).mean()
+    avg_loss = loss.rolling(window=14).mean()
+    rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
-    return round(rsi.iloc[-1], 2)
+    latest_rsi = rsi.iloc[-1]
+    if latest_rsi > 70:
+        return 0
+    elif latest_rsi > 60:
+        return 1
+    elif latest_rsi > 50:
+        return 2
+    else:
+        return 3
 
-def get_ema(closes, period):
-    return round(pd.Series(closes).ewm(span=period, adjust=False).mean().iloc[-1], 2)
+def get_ema_score(closes):
+    prices = pd.Series(closes)
+    ema_20 = prices.ewm(span=20).mean().iloc[-1]
+    ema_50 = prices.ewm(span=50).mean().iloc[-1]
+    ema_200 = prices.ewm(span=200).mean().iloc[-1]
+    current = prices.iloc[-1]
+    score = 0
+    if current > ema_200:
+        score += 1
+    if current > ema_50:
+        score += 1
+    if current > ema_20:
+        score += 1
+    return score
 
-def calculate_macd(closes):
-    series = pd.Series(closes)
-    exp1 = series.ewm(span=12, adjust=False).mean()
-    exp2 = series.ewm(span=26, adjust=False).mean()
-    macd = exp1 - exp2
-    signal = macd.ewm(span=9, adjust=False).mean()
-    histogram = macd - signal
-    return macd.iloc[-1], signal.iloc[-1], histogram.iloc[-1]
+def calculate_macd(close_prices, fast=12, slow=26, signal=9):
+    prices = pd.Series(close_prices)
+    exp1 = prices.ewm(span=fast, adjust=False).mean()
+    exp2 = prices.ewm(span=slow, adjust=False).mean()
+    macd_line = exp1 - exp2
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+    return float(macd_line.iloc[-1]), float(signal_line.iloc[-1]), float(histogram.iloc[-1])
 
-def score_macd(histogram):
+def score_macd(macd_line, signal_line, histogram):
     if histogram > 0:
         return 2
     elif histogram < 0:
@@ -60,79 +92,62 @@ def score_macd(histogram):
     else:
         return 0
 
-def get_fibonacci(closes):
-    max_p = max(closes)
-    min_p = min(closes)
-    diff = max_p - min_p
-    return {
-        "0.236": round(max_p - diff * 0.236, 2),
-        "0.382": round(max_p - diff * 0.382, 2),
-        "0.5": round(max_p - diff * 0.5, 2),
-        "0.618": round(max_p - diff * 0.618, 2),
-        "0.786": round(max_p - diff * 0.786, 2)
-    }
+def analyze_coin(symbol):
+    timeframes = ["15m", "1h", "4h", "1d"]
+    rsi_scores, macd_scores, ema_scores = [], [], []
 
-def get_bollinger(closes):
-    prices = pd.Series(closes)
-    ma = prices.rolling(window=20).mean()
-    std = prices.rolling(window=20).std()
-    upper = ma + 2 * std
-    lower = ma - 2 * std
-    last = prices.iloc[-1]
-    if last > upper.iloc[-1]:
-        return "Üst Bant"
-    elif last < lower.iloc[-1]:
-        return "Alt Bant"
-    return "Orta Bant"
+    for tf in timeframes:
+        try:
+            closes = get_klines(symbol, tf)
+            closes_series = pd.Series(closes)
 
-def yapay_tahmin():
-    return np.random.randint(45, 65), np.random.randint(35, 55)
+            rsi = get_rsi_score(closes)
+            macd_line, signal_line, hist = calculate_macd(closes_series)
+            macd = score_macd(macd_line, signal_line, hist)
+            ema = get_ema_score(closes)
 
-def analiz_yap(symbol):
-    closes = get_klines(symbol)
-    rsi = get_rsi(closes)
-    ema20 = get_ema(closes, 20)
-    ema50 = get_ema(closes, 50)
-    macd_line, signal_line, hist = calculate_macd(closes)
-    macd_score = score_macd(hist)
-    boll = get_bollinger(closes)
-    fibo = get_fibonacci(closes)
-    up, down = yapay_tahmin()
+            rsi_scores.append(rsi)
+            macd_scores.append(macd)
+            ema_scores.append(ema)
+        except:
+            rsi_scores.append(0)
+            macd_scores.append(0)
+            ema_scores.append(0)
 
-    fiyat = float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol=" + symbol).json()["price"])
-    ort = round((rsi / 50 + macd_score + (1 if fiyat > ema50 else 0)) / 3, 2)
+    ortalama_puan = round((sum(rsi_scores) + sum(macd_scores) + sum(ema_scores)) / 12, 2)
 
-    yorum = "📈 Boğa Gücü" if ort >= 2 else "📉 Ayı Baskısı"
-    karar = "✅ Long açılır" if ort >= 2 else "⚠️ Short riski yüksek"
+    if ortalama_puan >= 7:
+        yorum = "🐂 Boğa piyasası"
+    elif ortalama_puan <= 3:
+        yorum = "🐻 Ayı piyasası"
+    else:
+        yorum = "⚖️ Kararsız bölge"
 
-    return f"""📊 Teknik Analiz: {symbol}
+    try:
+        fiyat = float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}").json()["price"])
+    except:
+        fiyat = 0.0
+
+    mesaj = f"""📊 Teknik Analiz: {symbol}
 Fiyat: {fiyat} USDT
-
-🔹 RSI: {rsi}
-🔹 EMA20: {ema20}
-🔹 EMA50: {ema50}
-🔹 MACD Histogram: {round(hist, 5)}
-🔹 MACD Puanı: {macd_score}
-🔹 Bollinger Durumu: {boll}
-🔹 Fibo Seviyeleri:
-  - 0.236: {fibo['0.236']}
-  - 0.382: {fibo['0.382']}
-  - 0.5: {fibo['0.5']}
-  - 0.618: {fibo['0.618']}
-  - 0.786: {fibo['0.786']}
-
-🧠 AI Tahmini:
-📈 Yükseliş olasılığı: %{up}
-📉 Düşüş olasılığı: %{down}
-
-🎯 Ortalama Puan: {ort}/10
+———————————————
+🔹 RSI Puanları: {rsi_scores}
+🔹 MACD Puanları: {macd_scores}
+🔹 EMA Puanları: {ema_scores}
+———————————————
+🎯 Ortalama Puan: {ortalama_puan}/10
 💬 Yorum: {yorum}
-⚠️ AI Karar: {karar}
 """
+    return mesaj
 
-@bot.message_handler(func=lambda msg: msg.text.upper() in coin_list)
-def cevapla(msg):
-    text = msg.text.upper()
-    bot.send_message(msg.chat.id, analiz_yap(text))
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    text = message.text.strip().upper()
+    if "ANALİZ" in text:
+        coin = text.replace("ANALİZ", "").strip()
+        if coin in coin_list:
+            reply = analyze_coin(coin)
+            bot.send_message(message.chat.id, reply)
 
-bot.polling()
+if __name__ == "__main__":
+    bot.polling()
