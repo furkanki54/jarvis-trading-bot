@@ -6,7 +6,7 @@ from telebot import TeleBot
 TOKEN = "8171630986:AAFUJ6tTJsAYDg6ZeOt0AyU43k3RjaKmfGc"
 bot = TeleBot(TOKEN)
 
-coin_list = [
+coin_list = [  # SENİN TAM LİSTEN
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
     "BATUSDT", "VETUSDT", "NEOUSDT", "QTUMUSDT", "IOSTUSDT", "THETAUSDT", "ALGOUSDT", "ZILUSDT", "KNCUSDT",
@@ -68,9 +68,19 @@ def analyze(message):
         ema20 = round(pd.Series(prices).ewm(span=20).mean().iloc[-1], 2)
         ema50 = round(pd.Series(prices).ewm(span=50).mean().iloc[-1], 2)
         macd_scores = calculate_macd(prices)
+        macd_avg = sum(macd_scores) / len(macd_scores)
         price = prices[-1]
 
-        total_score = round((rsi / 100 * 3) + (sum(macd_scores) / 10) + (1 if price > ema20 and price > ema50 else 0), 2)
+        total_score = round((rsi / 100 * 3) + macd_avg + (1 if price > ema20 and price > ema50 else 0), 2)
+
+        if total_score > 7:
+            karar = "📈 AI Karar: Long açılır"
+        elif total_score > 5:
+            karar = "✅ AI Karar: Short denenmez"
+        elif total_score > 3:
+            karar = "⏳ AI Karar: Fırsat için beklenmeli"
+        else:
+            karar = "⚠️ AI Karar: Short riski yüksek"
 
         yorum = "📈 Boğa Gücü" if total_score > 7 else "⚠️ Nötr" if total_score > 4 else "📉 Ayı Baskısı"
 
@@ -85,6 +95,7 @@ Fiyat: {price} USDT
 
 🎯 Ortalama Puan: {total_score}/10
 💬 Yorum: {yorum}
+{karar}
         ''')
     except Exception as e:
         bot.send_message(message.chat.id, f"Hata: {e}")
