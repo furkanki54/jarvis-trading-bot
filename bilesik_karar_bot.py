@@ -1,12 +1,11 @@
 import telebot
 import requests
 import pandas as pd
+import numpy as np
 
-# Telegram bot token
-TOKEN = "8078903959:AAF37zwfzT1lJXqgob_3bCxEeiDgbRSow3w"
+TOKEN = "YENİ_TOKENIN_BURAYA"  # Buraya yeni tokenı gir
 bot = telebot.TeleBot(TOKEN)
 
-# Coin listesi (200+ coin sabit)
 coin_list = [
     "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT",
     "ADAUSDT", "XMRUSDT", "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT",
@@ -34,120 +33,91 @@ coin_list = [
     "BOMEUSDT"
 ]
 
-def get_klines(symbol, interval, limit=1000):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    response = requests.get(url)
-    data = response.json()
-    closes = [float(entry[4]) for entry in data]
-    return closes
+def get_klines(symbol):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1h&limit=100"
+    r = requests.get(url)
+    return [float(i[4]) for i in r.json()]
 
-def get_rsi_score(closes):
-    prices = pd.Series(closes)
-    delta = prices.diff()
+def calculate_macd(closes):
+    closes = pd.Series(closes)
+    exp1 = closes.ewm(span=12, adjust=False).mean()
+    exp2 = closes.ewm(span=26, adjust=False).mean()
+    macd_line = exp1 - exp2
+    signal = macd_line.ewm(span=9, adjust=False).mean()
+    hist = macd_line - signal
+    return macd_line.iloc[-1], signal.iloc[-1], hist.iloc[-1]
+
+def get_ema(closes, period):
+    return pd.Series(closes).ewm(span=period, adjust=False).mean().iloc[-1]
+
+def get_rsi(closes):
+    delta = pd.Series(closes).diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
     avg_gain = gain.rolling(window=14).mean()
     avg_loss = loss.rolling(window=14).mean()
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
-    latest_rsi = rsi.iloc[-1]
-    if latest_rsi > 70:
-        return 0
-    elif latest_rsi > 60:
-        return 1
-    elif latest_rsi > 50:
-        return 2
+    return rsi.iloc[-1]
+
+def calculate_bollinger(closes):
+    series = pd.Series(closes)
+    sma = series.rolling(window=20).mean()
+    std = series.rolling(window=20).std()
+    upper = sma + (std * 2)
+    lower = sma - (std * 2)
+    price = series.iloc[-1]
+    if price > upper.iloc[-1]:
+        return "Üst Bant"
+    elif price < lower.iloc[-1]:
+        return "Alt Bant"
     else:
-        return 3
+        return "Orta Bant"
 
-def get_ema_score(closes):
-    prices = pd.Series(closes)
-    ema_20 = prices.ewm(span=20).mean().iloc[-1]
-    ema_50 = prices.ewm(span=50).mean().iloc[-1]
-    ema_200 = prices.ewm(span=200).mean().iloc[-1]
-    current = prices.iloc[-1]
-    score = 0
-    if current > ema_200:
-        score += 1
-    if current > ema_50:
-        score += 1
-    if current > ema_20:
-        score += 1
-    return score
+def fibonacci_levels(closes):
+    max_price = max(closes)
+    min_price = min(closes)
+    diff = max_price - min_price
+    levels = {
+        "0.236": max_price - 0.236 * diff,
+        "0.382": max_price - 0.382 * diff,
+        "0.5": max_price - 0.5 * diff,
+        "0.618": max_price - 0.618 * diff,
+        "0.786": max_price - 0.786 * diff,
+    }
+    return levels
 
-def calculate_macd(close_prices, fast=12, slow=26, signal=9):
-    prices = pd.Series(close_prices)
-    exp1 = prices.ewm(span=fast, adjust=False).mean()
-    exp2 = prices.ewm(span=slow, adjust=False).mean()
-    macd_line = exp1 - exp2
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    histogram = macd_line - signal_line
-    return float(macd_line.iloc[-1]), float(signal_line.iloc[-1]), float(histogram.iloc[-1])
+@bot.message_handler(func=lambda msg: msg.text.lower() == "btc analiz")
+def analiz_yap(msg):
+    symbol = "BTCUSDT"
+    closes = get_klines(symbol)
+    fiyat = closes[-1]
+    rsi = get_rsi(closes)
+    ema20 = get_ema(closes, 20)
+    ema50 = get_ema(closes, 50)
+    macd_line, signal_line, hist = calculate_macd(closes)
+    bollinger = calculate_bollinger(closes)
+    fibo = fibonacci_levels(closes)
 
-def score_macd(macd_line, signal_line, histogram):
-    if histogram > 0:
-        return 2
-    elif histogram < 0:
-        return 1
-    else:
-        return 0
-
-def analyze_coin(symbol):
-    timeframes = ["15m", "1h", "4h", "1d"]
-    rsi_scores, macd_scores, ema_scores = [], [], []
-
-    for tf in timeframes:
-        try:
-            closes = get_klines(symbol, tf)
-            closes_series = pd.Series(closes)
-
-            rsi = get_rsi_score(closes)
-            macd_line, signal_line, hist = calculate_macd(closes_series)
-            macd = score_macd(macd_line, signal_line, hist)
-            ema = get_ema_score(closes)
-
-            rsi_scores.append(rsi)
-            macd_scores.append(macd)
-            ema_scores.append(ema)
-        except:
-            rsi_scores.append(0)
-            macd_scores.append(0)
-            ema_scores.append(0)
-
-    ortalama_puan = round((sum(rsi_scores) + sum(macd_scores) + sum(ema_scores)) / 12, 2)
-
-    if ortalama_puan >= 7:
-        yorum = "🐂 Boğa piyasası"
-    elif ortalama_puan <= 3:
-        yorum = "🐻 Ayı piyasası"
-    else:
-        yorum = "⚖️ Kararsız bölge"
-
-    try:
-        fiyat = float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}").json()["price"])
-    except:
-        fiyat = 0.0
+    macd_score = 1 if macd_line > signal_line and hist > 0 else 0
+    ort_puan = round((macd_score + (rsi / 100) + (fiyat > ema20) + (fiyat > ema50)) / 4 * 10, 2)
+    yorum = "📈 Boğa Gücü" if ort_puan > 6 else "📉 Ayı Baskısı"
 
     mesaj = f"""📊 Teknik Analiz: {symbol}
-Fiyat: {fiyat} USDT
-———————————————
-🔹 RSI Puanları: {rsi_scores}
-🔹 MACD Puanları: {macd_scores}
-🔹 EMA Puanları: {ema_scores}
-———————————————
-🎯 Ortalama Puan: {ortalama_puan}/10
+Fiyat: {round(fiyat, 2)} USDT
+
+🔹 RSI: {round(rsi, 2)}
+🔹 EMA20: {round(ema20, 2)}
+🔹 EMA50: {round(ema50, 2)}
+🔹 MACD Histogram: {round(hist, 5)}
+🔹 Bollinger Durumu: {bollinger}
+🔹 Fibo Seviyeleri:\n""" + "\n".join([f"  - {k}: {round(v, 2)}" for k, v in fibo.items()]) + f"""
+
+🎯 Ortalama Puan: {ort_puan}/10
 💬 Yorum: {yorum}
+⚠️ AI Karar: {'Long açılır' if ort_puan > 6 else 'Short riski yüksek'}
 """
-    return mesaj
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    text = message.text.strip().upper()
-    if "ANALİZ" in text:
-        coin = text.replace("ANALİZ", "").strip()
-        if coin in coin_list:
-            reply = analyze_coin(coin)
-            bot.send_message(message.chat.id, reply)
+    bot.send_message(msg.chat.id, mesaj)
 
-if __name__ == "__main__":
-    bot.polling()
+bot.polling()
