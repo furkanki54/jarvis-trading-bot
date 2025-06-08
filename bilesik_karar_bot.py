@@ -54,13 +54,15 @@ def calculate_macd(prices):
     signal_line = macd_line.ewm(span=9, adjust=False).mean()
     hist = macd_line - signal_line
     scores = []
+
     for h in hist[-5:]:
-        if h > 0.00001:
+        if h > 0:
             scores.append(2)
-        elif h < -0.00001:
+        elif h < 0:
             scores.append(0)
         else:
             scores.append(1)
+
     return scores
 
 def calculate_bollinger(prices, period=20):
@@ -110,7 +112,7 @@ def analiz_et(m):
         boll_pos = "Alt banda yakın" if price < lower else "Üst banda yakın" if price > upper else "Orta bant"
         fibo = calculate_fibonacci(prices)
         rise, fall = predict_trend(prices)
-        fibo_text = "\\n".join([f"  - {k}: {v}" for k, v in fibo.items()])
+        fibo_text = "\n  - ".join([f"{k}: {v}" for k, v in fibo.items()])
         macd_avg = sum(macd_scores) / len(macd_scores)
         total_score = round((rsi / 100 * 3) + macd_avg + (1 if price > ema20 and price > ema50 else 0), 2)
 
@@ -134,7 +136,7 @@ Fiyat: {price} USDT
 🔹 MACD Puanları: {macd_scores}
 🔹 Bollinger Durumu: {boll_pos}
 🔹 Fibo Seviyeleri:
-{fibo_text}
+  - {fibo_text}
 
 🧠 AI Tahmini:
 📈 Yükseliş olasılığı: %{rise}
