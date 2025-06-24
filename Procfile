@@ -1,1 +1,1 @@
-worker: python formasyon_bot.py
+worker: python3 historical_data_fetcher.py
