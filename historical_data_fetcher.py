@@ -2,81 +2,55 @@ import os
 import time
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
+from config import TELEGRAM_TOKEN, CHAT_ID
+from telebot import TeleBot
 
-# ========================
-COIN_LIST_FILE = "coin_list.txt"
-DATA_DIR = "data"
-INTERVALS = ["1d", "4h"]
-START_DATE = "2020-01-01"
-# ========================
+# Telegram bot ayarı
+bot = TeleBot(TELEGRAM_TOKEN)
 
-def interval_to_ms(interval):
-    if interval.endswith('m'):
-        return int(interval[:-1]) * 60 * 1000
-    elif interval.endswith('h'):
-        return int(interval[:-1]) * 60 * 60 * 1000
-    elif interval.endswith('d'):
-        return int(interval[:-1]) * 24 * 60 * 60 * 1000
-    else:
-        raise ValueError("Geçersiz interval: " + interval)
+# Coin listesi
+def load_coin_list():
+    with open("coin_list.txt", "r") as f:
+        return [line.strip().upper() for line in f.readlines()]
 
-def fetch_klines(symbol, interval, start_time):
-    url = "https://fapi.binance.com/fapi/v1/klines"
-    limit = 1500
-    end_time = int(time.time() * 1000)
-    data = []
-    while True:
-        params = {
-            "symbol": symbol,
-            "interval": interval,
-            "startTime": start_time,
-            "limit": limit
-        }
-        response = requests.get(url, params=params)
-        if response.status_code != 200:
-            print(f"[HATA] {symbol} için veri alınamadı. Kod: {response.status_code}")
-            break
-        candles = response.json()
-        if not candles:
-            break
-        data += candles
-        last_time = candles[-1][0]
-        start_time = last_time + interval_to_ms(interval)
-        if start_time > end_time:
-            break
-        time.sleep(0.2)
-    return data
+coin_list = load_coin_list()
 
-def save_data_to_csv(symbol, interval, candles):
-    columns = [
-        "timestamp", "open", "high", "low", "close", "volume",
-        "close_time", "quote_asset_volume", "num_trades",
-        "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
-    ]
-    df = pd.DataFrame(candles, columns=columns)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    filename = f"{DATA_DIR}/{symbol}_{interval}.csv"
-    df.to_csv(filename, index=False)
-    print(f"[KAYIT] {filename} kaydedildi.")
+# 📁 CSV klasörü oluştur (eksikse)
+os.makedirs("data", exist_ok=True)
 
-def main():
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
+# Telegram mesaj gönder
+def send_signal(message):
+    bot.send_message(CHAT_ID, message)
 
-    with open(COIN_LIST_FILE, "r") as file:
-        coin_list = [line.strip().upper() for line in file.readlines()]
+# Binance'ten 1d veri çek
+def fetch_klines(symbol):
+    url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval=1d&limit=1000"
+    response = requests.get(url)
+    return response.json()
 
+# ⛏️ Her coin için veri çek ve CSV olarak kaydet
+def save_all_data():
     for symbol in coin_list:
-        for interval in INTERVALS:
-            try:
-                print(f"⏳ {symbol} ({interval}) verisi alınıyor...")
-                start_dt = datetime.strptime(START_DATE, "%Y-%m-%d")
-                start_ms = int(start_dt.timestamp() * 1000)
-                candles = fetch_klines(symbol, interval, start_ms)
-                save_data_to_csv(symbol, interval, candles)
-            except Exception as e:
-                print(f"[HATA] {symbol} {interval} – {e}")
+        try:
+            data = fetch_klines(symbol)
+            if not data:
+                send_signal(f"⚠️ {symbol} verisi boş.")
+                continue
+
+            df = pd.DataFrame(data, columns=[
+                "time", "open", "high", "low", "close", "volume",
+                "close_time", "quote_asset_volume", "trades",
+                "taker_buy_base_vol", "taker_buy_quote_vol", "ignore"
+            ])
+            df["time"] = pd.to_datetime(df["time"], unit="ms")
+            df.to_csv(f"data/{symbol}_1d.csv", index=False)
+            send_signal(f"✅ {symbol} CSV kaydedildi.")
+            time.sleep(1)
+        except Exception as e:
+            send_signal(f"❌ {symbol} için hata: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    send_signal("📥 Veri çekme başladı...")
+    save_all_data()
+    send_signal("📁 Tüm veriler kaydedildi.")
