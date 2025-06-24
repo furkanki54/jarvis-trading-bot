@@ -5,19 +5,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # ========================
-# AYARLAR
-# ========================
-COIN_LIST_FILE = "coin_list.txt"  # 200+ coin listesi burada
-DATA_DIR = "data"  # Veriler buraya kaydedilecek
-INTERVALS = ["1d", "4h"]  # İki zaman dilimi
-START_DATE = "2020-01-01"  # Başlangıç
-
-# ========================
-# Yardımcı Fonksiyonlar
+COIN_LIST_FILE = "coin_list.txt"
+DATA_DIR = "data"
+INTERVALS = ["1d", "4h"]
+START_DATE = "2020-01-01"
 # ========================
 
 def interval_to_ms(interval):
-    """Zaman aralığını milisaniyeye çevirir"""
     if interval.endswith('m'):
         return int(interval[:-1]) * 60 * 1000
     elif interval.endswith('h'):
@@ -51,7 +45,7 @@ def fetch_klines(symbol, interval, start_time):
         start_time = last_time + interval_to_ms(interval)
         if start_time > end_time:
             break
-        time.sleep(0.2)  # API limiti için yavaşlat
+        time.sleep(0.2)
     return data
 
 def save_data_to_csv(symbol, interval, candles):
@@ -65,10 +59,6 @@ def save_data_to_csv(symbol, interval, candles):
     filename = f"{DATA_DIR}/{symbol}_{interval}.csv"
     df.to_csv(filename, index=False)
     print(f"[KAYIT] {filename} kaydedildi.")
-
-# ========================
-# Ana Çalışma
-# ========================
 
 def main():
     if not os.path.exists(DATA_DIR):
