@@ -8,11 +8,8 @@ from config import TELEGRAM_TOKEN, CHAT_ID
 
 bot = TeleBot(TELEGRAM_TOKEN)
 
-COIN_LIST_FILE = "coin_list.txt"
-DATA_DIR = "data"
-
 def load_coin_list():
-    with open(COIN_LIST_FILE, "r") as f:
+    with open("coin_list.txt", "r") as f:
         return [line.strip().upper() for line in f.readlines()]
 
 def send_telegram_message(message):
@@ -61,7 +58,7 @@ def calculate_fibonacci_levels(prices):
 
 def analyze_coin(symbol):
     try:
-        df = pd.read_csv(f"{DATA_DIR}/{symbol}_1d.csv")
+        df = pd.read_csv(f"data/{symbol}_1d.csv")
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df.sort_values("timestamp", inplace=True)
 
