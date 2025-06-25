@@ -1,1 +1,1 @@
-worker: python3 mega_analysis_bot.py
+worker: python historical_data_fetcher.py
